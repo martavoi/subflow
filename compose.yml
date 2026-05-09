@@ -1,0 +1,75 @@
+services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  temporal:
+    image: temporalio/temporal:latest
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--ui-ip", "0.0.0.0", "--db-filename", "/data/temporal.db"]
+    ports:
+      - "7233:7233"     # frontend gRPC
+      - "8233:8233"     # web UI
+    volumes:
+      - temporaldata:/data
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/temporal", "operator", "cluster", "health", "--address", "localhost:7233"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  mock-integration:
+    build:
+      context: .
+      dockerfile: cmd/mock-integration/Dockerfile
+    ports:
+      - "50052:50052"
+    environment:
+      MOCK_GRPC_PORT: "50052"
+      FAILURE_RATE: "${FAILURE_RATE:-0.3}"
+      LATENCY_MS: "${LATENCY_MS:-100}"
+      TERMINAL_FAILURE_RATE: "${TERMINAL_FAILURE_RATE:-0.0}"
+
+  subflow-api:
+    build:
+      context: .
+      dockerfile: cmd/api/Dockerfile
+    ports:
+      - "50051:50051"
+    depends_on:
+      mongo: { condition: service_healthy }
+      temporal: { condition: service_healthy }
+    environment:
+      API_GRPC_PORT: "50051"
+      TEMPORAL_HOST: "temporal:7233"
+      TEMPORAL_NAMESPACE: "default"
+      MONGO_URI: "mongodb://mongo:27017"
+      MONGO_DATABASE: "subflow"
+      INTEGRATION_HOST: "mock-integration:50052"
+
+  subflow-worker:
+    build:
+      context: .
+      dockerfile: cmd/worker/Dockerfile
+    depends_on:
+      mongo: { condition: service_healthy }
+      temporal: { condition: service_healthy }
+    environment:
+      TEMPORAL_HOST: "temporal:7233"
+      TEMPORAL_NAMESPACE: "default"
+      TASK_QUEUE: "subflow"
+      MONGO_URI: "mongodb://mongo:27017"
+      MONGO_DATABASE: "subflow"
+      PAYMENT_TRANSIENT_RATE: "0.0"
+      PAYMENT_TERMINAL_RATE: "0.0"
+
+volumes:
+  mongodata:
+  temporaldata:
