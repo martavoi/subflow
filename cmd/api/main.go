@@ -72,7 +72,7 @@ func main() {
 		PlanService: &server.PlanService{Repo: planRepo},
 		SubscriptionService: &server.SubscriptionService{
 			Temporal:           tc,
-			TaskQueue:          "subflow",
+			TaskQueue:          cfg.TaskQueue,
 			PlanRepo:           planRepo,
 			Projection:         projection,
 			DefaultIntegration: cfg.IntegrationHost,

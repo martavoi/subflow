@@ -10,6 +10,7 @@ type API struct {
 	GRPCPort          string
 	TemporalHost      string
 	TemporalNamespace string
+	TaskQueue         string // must match the worker's TASK_QUEUE
 	MongoURI          string
 	MongoDatabase     string
 	IntegrationHost   string // default endpoint when plan does not override
@@ -37,6 +38,7 @@ func LoadAPI() (API, error) {
 		GRPCPort:          getenv("API_GRPC_PORT", "50051"),
 		TemporalHost:      getenv("TEMPORAL_HOST", "localhost:7233"),
 		TemporalNamespace: getenv("TEMPORAL_NAMESPACE", "default"),
+		TaskQueue:         getenv("TASK_QUEUE", "subflow"),
 		MongoURI:          getenv("MONGO_URI", "mongodb://localhost:27017"),
 		MongoDatabase:     getenv("MONGO_DATABASE", "subflow"),
 		IntegrationHost:   getenv("INTEGRATION_HOST", "localhost:50052"),
