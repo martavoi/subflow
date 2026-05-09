@@ -6,12 +6,12 @@ import (
 	"time"
 
 	subflowv1 "github.com/martavoi/subflow/api/v1"
-	"github.com/martavoi/subflow/internal/activity"
 	"github.com/martavoi/subflow/internal/domain/plan"
 	"github.com/martavoi/subflow/internal/domain/subscription"
 	"github.com/martavoi/subflow/internal/store"
 	"github.com/martavoi/subflow/internal/workflow"
 	"github.com/google/uuid"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -52,35 +52,42 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req *subfl
 		Context:         subscription.Context(req.InitialContext),
 	}
 
-	_, err = s.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:        "subscription:" + subID,
-		TaskQueue: s.TaskQueue,
+	// Start the workflow and run activation in the same round-trip so the
+	// customer learns whether their card was charged before this RPC returns.
+	startOp := s.Temporal.NewWithStartWorkflowOperation(client.StartWorkflowOptions{
+		ID:                       "subscription:" + subID,
+		TaskQueue:                s.TaskQueue,
+		WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	}, workflow.SubscriptionWorkflow, wfInput)
+
+	handle, err := s.Temporal.UpdateWithStartWorkflow(ctx, client.UpdateWithStartWorkflowOptions{
+		StartWorkflowOperation: startOp,
+		UpdateOptions: client.UpdateWorkflowOptions{
+			UpdateName:   workflow.UpdateActivate,
+			WaitForStage: client.WorkflowUpdateStageCompleted,
+		},
+	})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "start workflow: %v", err)
 	}
 
-	// Optimistic projection so List works immediately (worker will overwrite as it progresses).
-	_ = s.Projection.Upsert(ctx, store.SubscriptionView{
-		ID:           subID,
-		UserID:       req.UserId,
-		PlanID:       p.ID,
-		Phase:        activity.PhasePending,
-		PeriodStart:  wfInput.PeriodStart,
-		PeriodEnd:    wfInput.PeriodEnd,
-		RenewalCount: 0,
-		Context:      wfInput.Context,
-	})
+	var result workflow.ActivationResult
+	if err := handle.Get(ctx, &result); err != nil {
+		// Activation failed (e.g. card declined). The workflow surfaces this as
+		// an ApplicationError; map terminal billing failures to FailedPrecondition
+		// so callers can distinguish "your card was declined" from "service down".
+		return nil, status.Errorf(codes.FailedPrecondition, "activation failed: %v", err)
+	}
 
 	return &subflowv1.Subscription{
 		Id:           subID,
 		UserId:       req.UserId,
 		PlanId:       p.ID,
-		Phase:        activity.PhasePending,
+		Phase:        result.Phase,
 		PeriodStart:  timestamppb.New(wfInput.PeriodStart),
 		PeriodEnd:    timestamppb.New(wfInput.PeriodEnd),
 		RenewalCount: 0,
-		Context:      map[string]string(wfInput.Context),
+		Context:      map[string]string(result.Context),
 	}, nil
 }
 

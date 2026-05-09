@@ -34,6 +34,12 @@ func TestSubscriptionWorkflow_HappyActivation_ContinuesAsNew(t *testing.T) {
 
 	registerActivityMocks(env, nil)
 
+	// Activation runs via the Activate update; send it as soon as the workflow
+	// starts so it can register its update handler and process the request.
+	env.RegisterDelayedCallback(func() {
+		env.UpdateWorkflowNoRejection(UpdateActivate, "activation-1", t)
+	}, 0)
+
 	env.ExecuteWorkflow(SubscriptionWorkflow, sampleInput())
 
 	if !env.IsWorkflowCompleted() {
@@ -54,6 +60,10 @@ func TestSubscriptionWorkflow_CancelMidPeriod_RunsDeactivation(t *testing.T) {
 			deactivateCalled = true
 		}
 	})
+
+	env.RegisterDelayedCallback(func() {
+		env.UpdateWorkflowNoRejection(UpdateActivate, "activation-1", t)
+	}, 0)
 
 	env.RegisterDelayedCallback(func() {
 		env.SignalWorkflow(SignalCancelSubscription, nil)
