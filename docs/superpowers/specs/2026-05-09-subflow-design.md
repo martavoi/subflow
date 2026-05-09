@@ -254,7 +254,7 @@ message Plan {
   string id = 1;
   string code = 2;
   string name = 3;
-  string billing_interval = 4;       // ISO 8601 duration: "P1M", "P1Y", or seconds-style "30s" for fast demos
+  string billing_interval = 4;       // Go duration syntax: "30s", "5m", "720h" — chosen for POC simplicity over ISO 8601
   int64 price_cents = 5;
   string integration_endpoint = 6;
 }
@@ -320,7 +320,7 @@ The handlers contain only translation — no business logic.
   "_id": "<id>",
   "code": "monthly-basic",
   "name": "Monthly Basic",
-  "billing_interval": "P1M",
+  "billing_interval": "720h",
   "price_cents": 999,
   "integration_endpoint": "mock-integration:50052",
   "created_at": "ISODate(...)"
@@ -374,7 +374,7 @@ Temporal sees no heartbeat or activity timeout, reschedules the activity to a (r
 
 ### Cancel arrives before period end
 
-The signal flips a flag. The workflow remains parked on the timer until `PeriodEnd` (subly-style end-of-period semantics), then runs deactivation activities and completes.
+The signal flips a flag. The workflow remains parked on the timer until `PeriodEnd` (end-of-period semantics — the active billing period runs to completion before deactivation), then runs deactivation activities and completes.
 
 ---
 
