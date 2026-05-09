@@ -1,0 +1,120 @@
+version: '3'
+
+vars:
+  API_HOST: localhost:50051
+  PROTO_DIR: api/v1
+
+env:
+  CGO_ENABLED: "0"
+
+tasks:
+  proto-gen:
+    desc: Regenerate protobuf code
+    cmds:
+      - buf generate
+
+  build:
+    desc: Build all binaries to ./bin
+    cmds:
+      - go build -o bin/api ./cmd/api
+      - go build -o bin/worker ./cmd/worker
+      - go build -o bin/mock-integration ./cmd/mock-integration
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./... -v
+
+  up:
+    desc: Bring up the stack (podman compose)
+    cmds:
+      - podman compose up -d --build
+
+  down:
+    desc: Stop and remove containers (preserves volumes)
+    cmds:
+      - podman compose down
+
+  reset:
+    desc: Stop and wipe volumes (Mongo data + Temporal SQLite)
+    cmds:
+      - podman compose down -v
+
+  logs:
+    desc: Tail logs of all services
+    cmds:
+      - podman compose logs -f
+
+  ui:
+    desc: Open the Temporal Web UI
+    cmds:
+      - open http://localhost:8233
+
+  list-interfaces:
+    desc: List exposed gRPC services
+    cmds:
+      - grpcurl -plaintext {{.API_HOST}} list
+
+  seed-plan:
+    desc: 'Create a sample 30-second-period plan named "demo-fast" pointing at mock-integration'
+    cmds:
+      - |
+        grpcurl -plaintext -d '{
+          "code": "demo-fast",
+          "name": "Demo Fast (30s renewal)",
+          "billing_interval": "30s",
+          "price_cents": 999,
+          "integration_endpoint": "mock-integration:50052"
+        }' {{.API_HOST}} subflow.v1.SubflowService/CreatePlan
+
+  list-plans:
+    desc: List all plans
+    cmds:
+      - grpcurl -plaintext {{.API_HOST}} subflow.v1.SubflowService/ListPlans
+
+  create-subscription:
+    desc: 'Create a subscription. Vars: USER, PLAN_ID'
+    cmds:
+      - |
+        grpcurl -plaintext -d '{
+          "user_id": "{{.USER}}",
+          "plan_id": "{{.PLAN_ID}}",
+          "initial_context": {"card_id":"card_001"}
+        }' {{.API_HOST}} subflow.v1.SubflowService/CreateSubscription
+    requires:
+      vars: [USER, PLAN_ID]
+
+  cancel-subscription:
+    desc: 'Cancel a subscription. Var: ID'
+    cmds:
+      - |
+        grpcurl -plaintext -d '{"id":"{{.ID}}"}' \
+          {{.API_HOST}} subflow.v1.SubflowService/CancelSubscription
+    requires:
+      vars: [ID]
+
+  get-subscription:
+    desc: 'Get subscription state. Var: ID'
+    cmds:
+      - |
+        grpcurl -plaintext -d '{"id":"{{.ID}}"}' \
+          {{.API_HOST}} subflow.v1.SubflowService/GetSubscription
+    requires:
+      vars: [ID]
+
+  list-subscriptions:
+    desc: 'List subscriptions. Optional vars: USER, PHASE'
+    cmds:
+      - |
+        grpcurl -plaintext -d '{"user_id":"{{.USER}}","phase":"{{.PHASE}}"}' \
+          {{.API_HOST}} subflow.v1.SubflowService/ListSubscriptions
+
+  break-integration:
+    desc: Stop mock-integration to demonstrate Temporal retry behavior
+    cmds:
+      - podman compose stop mock-integration
+
+  fix-integration:
+    desc: Restart mock-integration so retried activities drain
+    cmds:
+      - podman compose start mock-integration
