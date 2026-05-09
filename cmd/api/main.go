@@ -15,6 +15,7 @@ import (
 	"github.com/martavoi/subflow/internal/store"
 	"go.temporal.io/sdk/client"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 // AggregateService composes plan + subscription services into a single
@@ -80,6 +81,7 @@ func main() {
 
 	g := grpc.NewServer()
 	subflowv1.RegisterSubflowServiceServer(g, svc)
+	reflection.Register(g)
 
 	lis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
 	if err != nil {
