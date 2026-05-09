@@ -3,6 +3,7 @@
 | Subscription concept | Temporal primitive | Where in code |
 |---|---|---|
 | Subscription instance | Workflow execution (ID `subscription:<id>`) | `internal/workflow/subscription.go` |
+| Sync activation in API response | Update `subscription.activate` invoked via `client.UpdateWithStartWorkflow` | `UpdateActivate` constant + handler in `subscription.go`; caller in `internal/server/subscriptions.go` |
 | Renewal cadence | `workflow.NewTimer` durable timer | `AwaitPeriodEndOrCancellation` in `internal/workflow/lifecycle.go` |
 | End of subscription period | Continue-As-New | `ContinueIntoNextPeriod` |
 | Cancel request | Signal `subscription.cancel` | `SignalCancelSubscription` constant |

@@ -25,14 +25,23 @@ task cancel-subscription ID=<sub-id>
 # Subscription remains active until the current period ends, then deactivates.
 ```
 
-> If host port `50051` is taken (e.g., another gRPC service is already running), edit `compose.yml` to remap `subflow-api`'s host port (e.g., `"50053:50051"`) and update `Taskfile.yml`'s `API_HOST` variable to match.
+> If host port `50051` is taken (e.g., another gRPC service is already running), set `API_HOST_PORT=50053` (or any free port) and update `Taskfile.yml`'s `API_HOST` variable to match.
+
+## Sync vs async semantics
+
+`CreateSubscription` is **synchronous**: the gRPC call blocks while the workflow runs the activation activities (charge → publish event → notify integration → write projection) and returns once the subscription is active. If the customer's card is declined, the call returns `FailedPrecondition` with the failure reason — exactly what a typical billing API would do. Internally this uses Temporal's `UpdateWithStartWorkflow` to start the workflow and run an `Activate` update in a single round trip.
+
+`CancelSubscription` is **fire-and-forget**: it sends a signal to the workflow and returns. The workflow honors end-of-period semantics — the active billing period runs to completion, then deactivation activities run, then the workflow ends.
+
+Renewals run **asynchronously inside the workflow** every billing interval — no synchronous customer is waiting for a renewal, and the workflow's durable timer fires regardless of API uptime.
 
 ## What you'll see in the Web UI
 
 1. **A workflow per subscription**, ID-prefixed `subscription:`.
-2. **Chained Continue-As-New runs**, one per billing period — bounded history regardless of subscription duration.
-3. **Activity retries with backoff** when you `task break-integration` (mock-integration is unavailable). Restart with `task fix-integration` and watch the queued retries drain.
-4. **Cancel-as-signal** semantics: signal arrives mid-period, workflow honors end-of-period, then runs deactivation.
+2. **An `Activate` workflow update** at the start of activation — visible as an Update event in the history; the activation activities run inside it.
+3. **Chained Continue-As-New runs**, one per billing period — bounded history regardless of subscription duration.
+4. **Activity retries with backoff** when you `task break-integration` (mock-integration is unavailable). Restart with `task fix-integration` and watch the queued retries drain.
+5. **Cancel-as-signal** semantics: signal arrives mid-period, workflow honors end-of-period, then runs deactivation.
 
 ## Architecture
 
