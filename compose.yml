@@ -42,7 +42,7 @@ services:
       context: .
       dockerfile: cmd/api/Dockerfile
     ports:
-      - "50051:50051"
+      - "${API_HOST_PORT:-50051}:50051"
     depends_on:
       mongo: { condition: service_healthy }
       temporal: { condition: service_healthy }

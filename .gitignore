@@ -20,3 +20,4 @@
 
 # Generated
 *.pb.go.bak
+compose.override.yml
