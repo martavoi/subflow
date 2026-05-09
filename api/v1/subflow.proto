@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package subflow.v1;
+
+option go_package = "github.com/martavoi/subflow/api/v1;subflowv1";
+
+import "google/protobuf/timestamp.proto";
+
+service SubflowService {
+  rpc CreatePlan(CreatePlanRequest) returns (Plan);
+  rpc GetPlan(GetPlanRequest) returns (Plan);
+  rpc ListPlans(ListPlansRequest) returns (ListPlansResponse);
+  rpc DeletePlan(DeletePlanRequest) returns (DeletePlanResponse);
+
+  rpc CreateSubscription(CreateSubscriptionRequest) returns (Subscription);
+  rpc CancelSubscription(CancelSubscriptionRequest) returns (CancelSubscriptionResponse);
+  rpc GetSubscription(GetSubscriptionRequest) returns (Subscription);
+  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);
+}
+
+message Plan {
+  string id = 1;
+  string code = 2;
+  string name = 3;
+  string billing_interval = 4; // Go duration syntax: "30s", "5m", "720h"
+  int64 price_cents = 5;
+  string integration_endpoint = 6;
+}
+
+message CreatePlanRequest {
+  string code = 1;
+  string name = 2;
+  string billing_interval = 3;
+  int64 price_cents = 4;
+  string integration_endpoint = 5;
+}
+
+message GetPlanRequest { string id = 1; }
+message ListPlansRequest {}
+message ListPlansResponse { repeated Plan plans = 1; }
+message DeletePlanRequest { string id = 1; }
+message DeletePlanResponse {}
+
+message Subscription {
+  string id = 1;
+  string user_id = 2;
+  string plan_id = 3;
+  string phase = 4;
+  google.protobuf.Timestamp period_start = 5;
+  google.protobuf.Timestamp period_end = 6;
+  int32 renewal_count = 7;
+  map<string, string> context = 8;
+  bool cancel_requested = 9;
+}
+
+message CreateSubscriptionRequest {
+  string user_id = 1;
+  string plan_id = 2;
+  map<string, string> initial_context = 3;
+}
+
+message CancelSubscriptionRequest { string id = 1; }
+message CancelSubscriptionResponse {}
+
+message GetSubscriptionRequest { string id = 1; }
+
+message ListSubscriptionsRequest {
+  string user_id = 1; // optional filter
+  string phase = 2;   // optional filter
+}
+message ListSubscriptionsResponse { repeated Subscription subscriptions = 1; }

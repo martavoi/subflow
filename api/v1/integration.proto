@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package subflow.integration.v1;
+
+option go_package = "github.com/martavoi/subflow/api/v1;subflowv1";
+
+service IntegrationService {
+  rpc HandleEvent(IntegrationEvent) returns (IntegrationResponse);
+}
+
+message IntegrationEvent {
+  string reference = 1;          // idempotency token
+  string event_type = 2;         // "subscription.activate" | "subscription.renew" | "subscription.deactivate"
+  string user_id = 3;
+  string plan_code = 4;
+  map<string, string> context = 5;
+}
+
+message IntegrationResponse {
+  map<string, string> updated_context = 1;
+}
