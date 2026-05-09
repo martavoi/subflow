@@ -1,0 +1,22 @@
+# Binaries
+/bin/
+/cmd/api/api
+/cmd/worker/worker
+/cmd/mock-integration/mock-integration
+
+# Local env
+.env
+*.local
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Volumes (for podman/docker compose-managed bind mounts only)
+/.data/
+
+# Generated
+*.pb.go.bak
