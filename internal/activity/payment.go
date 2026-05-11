@@ -9,52 +9,56 @@ import (
 	"go.temporal.io/sdk/temporal"
 )
 
-// ChargePaymentInput is the activity input. Reference is the idempotency token
-// constructed by the workflow.
 type ChargePaymentInput struct {
-	Reference  string
-	UserID     string
-	PriceCents int64
+	Reference   string
+	UserID      string
+	PlanCode    string
+	AmountCents int64
+	Currency    string
 }
 
 type ChargePaymentResult struct {
 	Reference     string
 	TransactionID string
 	AmountCents   int64
+	Currency      string
 }
 
-// PaymentActivities holds the (mocked) configuration for charging payments.
-// In a real implementation this would hold a payment gateway client.
+// PaymentActivities is the mocked payment gateway. In production this would
+// hold a real Stripe/Adyen/etc. client; here we inject failures probabilistically.
 type PaymentActivities struct {
 	TransientFailureRate float64
 	TerminalFailureRate  float64
 }
 
-// ChargePayment is the registered activity. It simulates a payment charge
-// with configurable failure injection.
+// ChargePayment simulates a charge attempt. Returns terminal or transient
+// errors based on configured rates.
 func (a *PaymentActivities) ChargePayment(ctx context.Context, in ChargePaymentInput) (ChargePaymentResult, error) {
 	logger := activity.GetLogger(ctx)
 
 	r := rand.Float64()
 	switch {
 	case r < a.TerminalFailureRate:
-		logger.Warn("ChargePayment terminal failure (declined)", slog.String("ref", in.Reference))
+		logger.Warn("ChargePayment terminal (declined)", slog.String("ref", in.Reference))
 		return ChargePaymentResult{}, temporal.NewNonRetryableApplicationError(
 			"card declined", ErrTypeCardDeclined, nil)
 	case r < a.TerminalFailureRate+a.TransientFailureRate:
-		logger.Warn("ChargePayment transient failure", slog.String("ref", in.Reference))
+		logger.Warn("ChargePayment transient gateway timeout", slog.String("ref", in.Reference))
 		return ChargePaymentResult{}, temporal.NewApplicationError(
-			"payment gateway timeout", "PaymentGatewayTimeoutError")
+			"payment gateway timeout", ErrTypePaymentGatewayTimeout)
 	}
 
 	logger.Info("ChargePayment success",
 		slog.String("ref", in.Reference),
 		slog.String("user", in.UserID),
-		slog.Int64("cents", in.PriceCents))
+		slog.String("plan", in.PlanCode),
+		slog.Int64("cents", in.AmountCents),
+		slog.String("currency", in.Currency))
 
 	return ChargePaymentResult{
 		Reference:     in.Reference,
 		TransactionID: "txn-" + in.Reference,
-		AmountCents:   in.PriceCents,
+		AmountCents:   in.AmountCents,
+		Currency:      in.Currency,
 	}, nil
 }
