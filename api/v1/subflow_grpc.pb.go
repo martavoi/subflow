@@ -19,28 +19,35 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SubflowService_CreatePlan_FullMethodName         = "/subflow.v1.SubflowService/CreatePlan"
-	SubflowService_GetPlan_FullMethodName            = "/subflow.v1.SubflowService/GetPlan"
-	SubflowService_ListPlans_FullMethodName          = "/subflow.v1.SubflowService/ListPlans"
-	SubflowService_DeletePlan_FullMethodName         = "/subflow.v1.SubflowService/DeletePlan"
-	SubflowService_CreateSubscription_FullMethodName = "/subflow.v1.SubflowService/CreateSubscription"
-	SubflowService_CancelSubscription_FullMethodName = "/subflow.v1.SubflowService/CancelSubscription"
-	SubflowService_GetSubscription_FullMethodName    = "/subflow.v1.SubflowService/GetSubscription"
-	SubflowService_ListSubscriptions_FullMethodName  = "/subflow.v1.SubflowService/ListSubscriptions"
+	SubflowService_CreatePlan_FullMethodName                = "/subflow.v1.SubflowService/CreatePlan"
+	SubflowService_GetPlan_FullMethodName                   = "/subflow.v1.SubflowService/GetPlan"
+	SubflowService_ListPlans_FullMethodName                 = "/subflow.v1.SubflowService/ListPlans"
+	SubflowService_DeletePlan_FullMethodName                = "/subflow.v1.SubflowService/DeletePlan"
+	SubflowService_CreateSubscription_FullMethodName        = "/subflow.v1.SubflowService/CreateSubscription"
+	SubflowService_CancelSubscription_FullMethodName        = "/subflow.v1.SubflowService/CancelSubscription"
+	SubflowService_GetSubscription_FullMethodName           = "/subflow.v1.SubflowService/GetSubscription"
+	SubflowService_ListSubscriptions_FullMethodName         = "/subflow.v1.SubflowService/ListSubscriptions"
+	SubflowService_UpdateSubscriptionContext_FullMethodName = "/subflow.v1.SubflowService/UpdateSubscriptionContext"
+	SubflowService_ListBillingEvents_FullMethodName         = "/subflow.v1.SubflowService/ListBillingEvents"
 )
 
 // SubflowServiceClient is the client API for SubflowService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SubflowServiceClient interface {
+	// Plans
 	CreatePlan(ctx context.Context, in *CreatePlanRequest, opts ...grpc.CallOption) (*Plan, error)
 	GetPlan(ctx context.Context, in *GetPlanRequest, opts ...grpc.CallOption) (*Plan, error)
 	ListPlans(ctx context.Context, in *ListPlansRequest, opts ...grpc.CallOption) (*ListPlansResponse, error)
 	DeletePlan(ctx context.Context, in *DeletePlanRequest, opts ...grpc.CallOption) (*DeletePlanResponse, error)
+	// Subscriptions
 	CreateSubscription(ctx context.Context, in *CreateSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error)
 	CancelSubscription(ctx context.Context, in *CancelSubscriptionRequest, opts ...grpc.CallOption) (*CancelSubscriptionResponse, error)
 	GetSubscription(ctx context.Context, in *GetSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error)
 	ListSubscriptions(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
+	UpdateSubscriptionContext(ctx context.Context, in *UpdateSubscriptionContextRequest, opts ...grpc.CallOption) (*Subscription, error)
+	// Billing history
+	ListBillingEvents(ctx context.Context, in *ListBillingEventsRequest, opts ...grpc.CallOption) (*ListBillingEventsResponse, error)
 }
 
 type subflowServiceClient struct {
@@ -131,18 +138,43 @@ func (c *subflowServiceClient) ListSubscriptions(ctx context.Context, in *ListSu
 	return out, nil
 }
 
+func (c *subflowServiceClient) UpdateSubscriptionContext(ctx context.Context, in *UpdateSubscriptionContextRequest, opts ...grpc.CallOption) (*Subscription, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Subscription)
+	err := c.cc.Invoke(ctx, SubflowService_UpdateSubscriptionContext_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *subflowServiceClient) ListBillingEvents(ctx context.Context, in *ListBillingEventsRequest, opts ...grpc.CallOption) (*ListBillingEventsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListBillingEventsResponse)
+	err := c.cc.Invoke(ctx, SubflowService_ListBillingEvents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SubflowServiceServer is the server API for SubflowService service.
 // All implementations should embed UnimplementedSubflowServiceServer
 // for forward compatibility.
 type SubflowServiceServer interface {
+	// Plans
 	CreatePlan(context.Context, *CreatePlanRequest) (*Plan, error)
 	GetPlan(context.Context, *GetPlanRequest) (*Plan, error)
 	ListPlans(context.Context, *ListPlansRequest) (*ListPlansResponse, error)
 	DeletePlan(context.Context, *DeletePlanRequest) (*DeletePlanResponse, error)
+	// Subscriptions
 	CreateSubscription(context.Context, *CreateSubscriptionRequest) (*Subscription, error)
 	CancelSubscription(context.Context, *CancelSubscriptionRequest) (*CancelSubscriptionResponse, error)
 	GetSubscription(context.Context, *GetSubscriptionRequest) (*Subscription, error)
 	ListSubscriptions(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error)
+	UpdateSubscriptionContext(context.Context, *UpdateSubscriptionContextRequest) (*Subscription, error)
+	// Billing history
+	ListBillingEvents(context.Context, *ListBillingEventsRequest) (*ListBillingEventsResponse, error)
 }
 
 // UnimplementedSubflowServiceServer should be embedded to have
@@ -175,6 +207,12 @@ func (UnimplementedSubflowServiceServer) GetSubscription(context.Context, *GetSu
 }
 func (UnimplementedSubflowServiceServer) ListSubscriptions(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptions not implemented")
+}
+func (UnimplementedSubflowServiceServer) UpdateSubscriptionContext(context.Context, *UpdateSubscriptionContextRequest) (*Subscription, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateSubscriptionContext not implemented")
+}
+func (UnimplementedSubflowServiceServer) ListBillingEvents(context.Context, *ListBillingEventsRequest) (*ListBillingEventsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListBillingEvents not implemented")
 }
 func (UnimplementedSubflowServiceServer) testEmbeddedByValue() {}
 
@@ -340,6 +378,42 @@ func _SubflowService_ListSubscriptions_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SubflowService_UpdateSubscriptionContext_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateSubscriptionContextRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SubflowServiceServer).UpdateSubscriptionContext(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SubflowService_UpdateSubscriptionContext_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SubflowServiceServer).UpdateSubscriptionContext(ctx, req.(*UpdateSubscriptionContextRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SubflowService_ListBillingEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListBillingEventsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SubflowServiceServer).ListBillingEvents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SubflowService_ListBillingEvents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SubflowServiceServer).ListBillingEvents(ctx, req.(*ListBillingEventsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SubflowService_ServiceDesc is the grpc.ServiceDesc for SubflowService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -378,6 +452,14 @@ var SubflowService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListSubscriptions",
 			Handler:    _SubflowService_ListSubscriptions_Handler,
+		},
+		{
+			MethodName: "UpdateSubscriptionContext",
+			Handler:    _SubflowService_UpdateSubscriptionContext_Handler,
+		},
+		{
+			MethodName: "ListBillingEvents",
+			Handler:    _SubflowService_ListBillingEvents_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

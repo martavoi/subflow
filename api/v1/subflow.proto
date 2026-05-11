@@ -7,56 +7,89 @@ option go_package = "github.com/martavoi/subflow/api/v1;subflowv1";
 import "google/protobuf/timestamp.proto";
 
 service SubflowService {
-  rpc CreatePlan(CreatePlanRequest) returns (Plan);
-  rpc GetPlan(GetPlanRequest) returns (Plan);
-  rpc ListPlans(ListPlansRequest) returns (ListPlansResponse);
-  rpc DeletePlan(DeletePlanRequest) returns (DeletePlanResponse);
+  // Plans
+  rpc CreatePlan(CreatePlanRequest)   returns (Plan);
+  rpc GetPlan(GetPlanRequest)         returns (Plan);
+  rpc ListPlans(ListPlansRequest)     returns (ListPlansResponse);
+  rpc DeletePlan(DeletePlanRequest)   returns (DeletePlanResponse);
 
-  rpc CreateSubscription(CreateSubscriptionRequest) returns (Subscription);
-  rpc CancelSubscription(CancelSubscriptionRequest) returns (CancelSubscriptionResponse);
-  rpc GetSubscription(GetSubscriptionRequest) returns (Subscription);
-  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);
+  // Subscriptions
+  rpc CreateSubscription(CreateSubscriptionRequest)               returns (Subscription);
+  rpc CancelSubscription(CancelSubscriptionRequest)               returns (CancelSubscriptionResponse);
+  rpc GetSubscription(GetSubscriptionRequest)                     returns (Subscription);
+  rpc ListSubscriptions(ListSubscriptionsRequest)                 returns (ListSubscriptionsResponse);
+  rpc UpdateSubscriptionContext(UpdateSubscriptionContextRequest) returns (Subscription);
+
+  // Billing history
+  rpc ListBillingEvents(ListBillingEventsRequest)                 returns (ListBillingEventsResponse);
 }
+
+// ---------- Plan ----------
 
 message Plan {
   string id = 1;
   string code = 2;
   string name = 3;
-  string billing_interval = 4; // Go duration syntax: "30s", "5m", "720h"
+  string cadence = 4;
   int64 price_cents = 5;
-  string integration_endpoint = 6;
+  string currency = 6;
+  int32 per_user_limit = 7;
+  string trial_duration = 8;
+  string trial_end_notice_before = 9;
+  int32 dunning_max_attempts = 10;
+  string dunning_retry_backoff = 11;
+  string integration_endpoint = 12;
+  repeated string enabled_hooks = 13;
 }
 
 message CreatePlanRequest {
   string code = 1;
   string name = 2;
-  string billing_interval = 3;
+  string cadence = 3;
   int64 price_cents = 4;
-  string integration_endpoint = 5;
+  string currency = 5;
+  int32 per_user_limit = 6;
+  string trial_duration = 7;
+  string trial_end_notice_before = 8;
+  int32 dunning_max_attempts = 9;
+  string dunning_retry_backoff = 10;
+  string integration_endpoint = 11;
+  repeated string enabled_hooks = 12;
 }
 
-message GetPlanRequest { string id = 1; }
-message ListPlansRequest {}
+message GetPlanRequest    { string id = 1; }
+message ListPlansRequest  {}
 message ListPlansResponse { repeated Plan plans = 1; }
 message DeletePlanRequest { string id = 1; }
 message DeletePlanResponse {}
 
+// ---------- Subscription ----------
+
 message Subscription {
   string id = 1;
   string user_id = 2;
-  string plan_id = 3;
+  string plan_code = 3;
   string phase = 4;
   google.protobuf.Timestamp period_start = 5;
   google.protobuf.Timestamp period_end = 6;
   int32 renewal_count = 7;
-  map<string, string> context = 8;
+  map<string,string> context = 8;
   bool cancel_requested = 9;
+
+  int32 dunning_attempt = 10;
+  google.protobuf.Timestamp last_charged_at = 11;
+  int64 last_charge_amount_cents = 12;
+  google.protobuf.Timestamp last_failure_at = 13;
+  string last_failure_reason = 14;
+  int64 total_charged_cents = 15;
+  int32 successful_charge_count = 16;
+  int32 failed_charge_count = 17;
 }
 
 message CreateSubscriptionRequest {
   string user_id = 1;
   string plan_id = 2;
-  map<string, string> initial_context = 3;
+  map<string,string> initial_context = 3;
 }
 
 message CancelSubscriptionRequest { string id = 1; }
@@ -65,7 +98,49 @@ message CancelSubscriptionResponse {}
 message GetSubscriptionRequest { string id = 1; }
 
 message ListSubscriptionsRequest {
-  string user_id = 1; // optional filter
-  string phase = 2;   // optional filter
+  string user_id = 1;
+  string plan_code = 2;
+  string phase = 3;
+  int32 page_size = 4;
+  string page_token = 5;
 }
-message ListSubscriptionsResponse { repeated Subscription subscriptions = 1; }
+message ListSubscriptionsResponse {
+  repeated Subscription subscriptions = 1;
+  string next_page_token = 2;
+}
+
+message UpdateSubscriptionContextRequest {
+  string id = 1;
+  map<string,string> updates = 2;
+}
+
+// ---------- Billing events ----------
+
+message BillingEvent {
+  string id = 1;
+  string subscription_id = 2;
+  string user_id = 3;
+  string plan_code = 4;
+  string type = 5;
+  int64 amount_cents = 6;
+  string currency = 7;
+  google.protobuf.Timestamp period_start = 8;
+  google.protobuf.Timestamp period_end = 9;
+  int32 renewal_count = 10;
+  int32 dunning_attempt = 11;
+  string transaction_id = 12;
+  string failure_reason = 13;
+  google.protobuf.Timestamp occurred_at = 14;
+}
+
+message ListBillingEventsRequest {
+  string subscription_id = 1;
+  string user_id = 2;
+  string type_filter = 3;
+  int32 page_size = 4;
+  string page_cursor = 5;
+}
+message ListBillingEventsResponse {
+  repeated BillingEvent events = 1;
+  string next_cursor = 2;
+}

@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package subflow.hooks.v1;
+
+option go_package = "github.com/martavoi/subflow/api/v1;subflowv1";
+
+import "google/protobuf/timestamp.proto";
+
+service SubscriptionHooks {
+  rpc OnTrialStarted     (LifecycleEvent) returns (HookAck);
+  rpc OnTrialWillEnd     (LifecycleEvent) returns (HookAck);
+  rpc OnActivated        (LifecycleEvent) returns (HookAck);
+  rpc OnRenewed          (LifecycleEvent) returns (HookAck);
+  rpc OnPastDue          (LifecycleEvent) returns (HookAck);
+  rpc OnRecovered        (LifecycleEvent) returns (HookAck);
+  rpc OnCanceled         (LifecycleEvent) returns (HookAck);
+  rpc OnDeactivated      (LifecycleEvent) returns (HookAck);
+
+  rpc OnPaymentSucceeded (PaymentEvent)   returns (HookAck);
+  rpc OnPaymentFailed    (PaymentEvent)   returns (HookAck);
+}
+
+message LifecycleEvent {
+  string reference = 1;
+  string subscription_id = 2;
+  string user_id = 3;
+  string plan_code = 4;
+  string phase = 5;
+  int32 renewal_count = 6;
+  google.protobuf.Timestamp period_start = 7;
+  google.protobuf.Timestamp period_end = 8;
+  google.protobuf.Timestamp event_time = 9;
+  map<string,string> context = 10;
+}
+
+message PaymentEvent {
+  string reference = 1;
+  string subscription_id = 2;
+  string user_id = 3;
+  string plan_code = 4;
+  int32 renewal_count = 5;
+  int32 dunning_attempt = 6;
+  int64 amount_cents = 7;
+  string currency = 8;
+  string transaction_id = 9;
+  string failure_reason = 10;
+  google.protobuf.Timestamp event_time = 11;
+  map<string,string> context = 12;
+}
+
+message HookAck {}
