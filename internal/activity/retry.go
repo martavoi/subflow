@@ -6,9 +6,9 @@ import (
 	"go.temporal.io/sdk/temporal"
 )
 
-// PaymentRetry retries transient payment failures with backoff but stops on
-// known terminal billing errors (declined, insufficient funds).
-var PaymentRetry = &temporal.RetryPolicy{
+// ChargePaymentRetry handles transient payment-gateway failures. Stops on
+// terminal billing errors (declined, insufficient funds).
+var ChargePaymentRetry = &temporal.RetryPolicy{
 	InitialInterval:    time.Second,
 	BackoffCoefficient: 2.0,
 	MaximumInterval:    time.Minute,
@@ -19,23 +19,25 @@ var PaymentRetry = &temporal.RetryPolicy{
 	},
 }
 
-// EventPublishingRetry retries forever — events should eventually publish.
-// Operator can fix the bus and let it drain.
-var EventPublishingRetry = &temporal.RetryPolicy{
-	InitialInterval:    time.Second,
-	BackoffCoefficient: 1.5,
-	MaximumInterval:    30 * time.Second,
-	MaximumAttempts:    0,
-}
-
-// IntegrationCallRetry retries forever for transient gRPC failures and stops
-// only on integration-side terminal errors.
-var IntegrationCallRetry = &temporal.RetryPolicy{
+// BillingEventRetry is bounded — if Mongo is down for 20 minutes, we give up
+// at the activity boundary. The charge already happened; the workflow logs
+// a critical error and proceeds. Workflow history is the forensic fallback.
+var BillingEventRetry = &temporal.RetryPolicy{
 	InitialInterval:    time.Second,
 	BackoffCoefficient: 2.0,
 	MaximumInterval:    time.Minute,
+	MaximumAttempts:    20,
+}
+
+// HookRetry handles transient integration failures. Unlimited retries —
+// hooks must eventually deliver. Integrators return HookTerminalError to
+// permanently fail.
+var HookRetry = &temporal.RetryPolicy{
+	InitialInterval:    time.Second,
+	BackoffCoefficient: 2.0,
+	MaximumInterval:    5 * time.Minute,
 	MaximumAttempts:    0,
 	NonRetryableErrorTypes: []string{
-		ErrTypeIntegrationTerminal,
+		ErrTypeHookTerminal,
 	},
 }
