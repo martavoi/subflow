@@ -15,13 +15,20 @@ import (
 var ErrPlanNotFound = errors.New("plan not found")
 
 type planDoc struct {
-	ID                  string    `bson:"_id"`
-	Code                string    `bson:"code"`
-	Name                string    `bson:"name"`
-	BillingInterval     string    `bson:"billing_interval"` // stored as Go duration string for human-readable docs
-	PriceCents          int64     `bson:"price_cents"`
-	IntegrationEndpoint string    `bson:"integration_endpoint"`
-	CreatedAt           time.Time `bson:"created_at"`
+	ID                   string          `bson:"_id"`
+	Code                 string          `bson:"code"`
+	Name                 string          `bson:"name"`
+	Cadence              string          `bson:"cadence"`
+	PriceCents           int64           `bson:"price_cents"`
+	Currency             string          `bson:"currency"`
+	PerUserLimit         int             `bson:"per_user_limit"`
+	TrialDuration        string          `bson:"trial_duration"`
+	TrialEndNoticeBefore string          `bson:"trial_end_notice_before"`
+	DunningMaxAttempts   int             `bson:"dunning_max_attempts"`
+	DunningRetryBackoff  string          `bson:"dunning_retry_backoff"`
+	IntegrationEndpoint  string          `bson:"integration_endpoint"`
+	EnabledHooks         []plan.HookName `bson:"enabled_hooks"`
+	CreatedAt            time.Time       `bson:"created_at"`
 }
 
 type PlanRepository struct {
@@ -42,21 +49,25 @@ func (r *PlanRepository) EnsureIndexes(ctx context.Context) error {
 }
 
 func (r *PlanRepository) Insert(ctx context.Context, p plan.Plan) error {
-	_, err := r.col.InsertOne(ctx, planDoc{
-		ID:                  p.ID,
-		Code:                p.Code,
-		Name:                p.Name,
-		BillingInterval:     p.BillingInterval.String(),
-		PriceCents:          p.PriceCents,
-		IntegrationEndpoint: p.IntegrationEndpoint,
-		CreatedAt:           p.CreatedAt,
-	})
+	_, err := r.col.InsertOne(ctx, planToDoc(p))
 	return err
 }
 
 func (r *PlanRepository) Get(ctx context.Context, id string) (plan.Plan, error) {
 	var d planDoc
 	err := r.col.FindOne(ctx, bson.M{"_id": id}).Decode(&d)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return plan.Plan{}, ErrPlanNotFound
+	}
+	if err != nil {
+		return plan.Plan{}, err
+	}
+	return docToPlan(d)
+}
+
+func (r *PlanRepository) GetByCode(ctx context.Context, code string) (plan.Plan, error) {
+	var d planDoc
+	err := r.col.FindOne(ctx, bson.M{"code": code}).Decode(&d)
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		return plan.Plan{}, ErrPlanNotFound
 	}
@@ -98,18 +109,72 @@ func (r *PlanRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+func planToDoc(p plan.Plan) planDoc {
+	return planDoc{
+		ID:                   p.ID,
+		Code:                 p.Code,
+		Name:                 p.Name,
+		Cadence:              p.Cadence.String(),
+		PriceCents:           p.PriceCents,
+		Currency:             p.Currency,
+		PerUserLimit:         p.PerUserLimit,
+		TrialDuration:        durationOrEmpty(p.TrialDuration),
+		TrialEndNoticeBefore: durationOrEmpty(p.TrialEndNoticeBefore),
+		DunningMaxAttempts:   p.DunningMaxAttempts,
+		DunningRetryBackoff:  durationOrEmpty(p.DunningRetryBackoff),
+		IntegrationEndpoint:  p.IntegrationEndpoint,
+		EnabledHooks:         append([]plan.HookName(nil), p.EnabledHooks...),
+		CreatedAt:            p.CreatedAt,
+	}
+}
+
 func docToPlan(d planDoc) (plan.Plan, error) {
-	dur, err := time.ParseDuration(d.BillingInterval)
+	cadence, err := time.ParseDuration(d.Cadence)
 	if err != nil {
-		return plan.Plan{}, fmt.Errorf("parse billing_interval %q: %w", d.BillingInterval, err)
+		return plan.Plan{}, fmt.Errorf("parse cadence %q: %w", d.Cadence, err)
+	}
+	trial, err := parseOptional(d.TrialDuration)
+	if err != nil {
+		return plan.Plan{}, fmt.Errorf("parse trial_duration: %w", err)
+	}
+	notice, err := parseOptional(d.TrialEndNoticeBefore)
+	if err != nil {
+		return plan.Plan{}, fmt.Errorf("parse trial_end_notice_before: %w", err)
+	}
+	backoff, err := parseOptional(d.DunningRetryBackoff)
+	if err != nil {
+		return plan.Plan{}, fmt.Errorf("parse dunning_retry_backoff: %w", err)
 	}
 	return plan.Plan{
-		ID:                  d.ID,
-		Code:                d.Code,
-		Name:                d.Name,
-		BillingInterval:     dur,
-		PriceCents:          d.PriceCents,
-		IntegrationEndpoint: d.IntegrationEndpoint,
-		CreatedAt:           d.CreatedAt,
+		ID:                   d.ID,
+		Code:                 d.Code,
+		Name:                 d.Name,
+		Cadence:              cadence,
+		PriceCents:           d.PriceCents,
+		Currency:             d.Currency,
+		PerUserLimit:         d.PerUserLimit,
+		TrialDuration:        trial,
+		TrialEndNoticeBefore: notice,
+		DunningMaxAttempts:   d.DunningMaxAttempts,
+		DunningRetryBackoff:  backoff,
+		IntegrationEndpoint:  d.IntegrationEndpoint,
+		EnabledHooks:         append([]plan.HookName(nil), d.EnabledHooks...),
+		CreatedAt:            d.CreatedAt,
 	}, nil
+}
+
+// durationOrEmpty formats an optional duration as either "" or its Go string.
+// parseOptional inverts it.
+func durationOrEmpty(d time.Duration) string {
+	if d == 0 {
+		return ""
+	}
+	return d.String()
+}
+
+func parseOptional(s string) (time.Duration, error) {
+	if s == "" {
+		return 0, nil
+	}
+	return time.ParseDuration(s)
 }
