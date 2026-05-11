@@ -1,6 +1,10 @@
 package subscription
 
-import "time"
+import (
+	"time"
+
+	"github.com/martavoi/subflow/internal/domain/plan"
+)
 
 // SubscriptionInput is the workflow input. Carried across Continue-As-New
 // so the next run can resume cleanly.
@@ -8,10 +12,7 @@ type SubscriptionInput struct {
 	SubscriptionID  string
 	UserID          string
 	PlanID          string
-	PlanCode        string
-	BillingInterval time.Duration
-	IntegrationHost string
-	PriceCents      int64
+	Plan            plan.Snapshot
 	PeriodStart     time.Time
 	PeriodEnd       time.Time
 	Context         Context
@@ -19,8 +20,8 @@ type SubscriptionInput struct {
 	CancelRequested bool
 }
 
-// IsActivation reports whether this run represents the first billing period
-// of the subscription.
-func (in SubscriptionInput) IsActivation() bool {
+// IsFirstPeriod reports whether this run represents the first billing period
+// of the subscription (either trial or first paid).
+func (in SubscriptionInput) IsFirstPeriod() bool {
 	return in.RenewalCount == 0
 }

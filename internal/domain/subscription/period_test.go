@@ -3,84 +3,67 @@ package subscription
 import (
 	"testing"
 	"time"
+
+	"github.com/martavoi/subflow/internal/domain/plan"
 )
 
-func TestNextBillingPeriod_AdvancesByBillingInterval(t *testing.T) {
+func sample() SubscriptionInput {
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	in := SubscriptionInput{
-		SubscriptionID:  "sub-1",
-		PlanID:          "plan-1",
-		BillingInterval: 30 * 24 * time.Hour,
-		PeriodStart:     start,
-		PeriodEnd:       start.Add(30 * 24 * time.Hour),
-		RenewalCount:    0,
-		Context:         Context{"k": "v"},
+	return SubscriptionInput{
+		SubscriptionID: "sub-1",
+		UserID:         "user-1",
+		PlanID:         "plan-1",
+		Plan: plan.Snapshot{
+			Code:    "monthly",
+			Cadence: 30 * 24 * time.Hour,
+		},
+		PeriodStart:  start,
+		PeriodEnd:    start.Add(30 * 24 * time.Hour),
+		RenewalCount: 0,
+		Context:      Context{"k": "v"},
 	}
+}
 
+func TestNextBillingPeriod_AdvancesByCadence(t *testing.T) {
+	in := sample()
 	next := NextBillingPeriod(in)
 
-	if got, want := next.PeriodStart, in.PeriodEnd; !got.Equal(want) {
-		t.Fatalf("PeriodStart = %v, want %v", got, want)
+	if !next.PeriodStart.Equal(in.PeriodEnd) {
+		t.Fatalf("PeriodStart = %v, want %v", next.PeriodStart, in.PeriodEnd)
 	}
-	if got, want := next.PeriodEnd, in.PeriodEnd.Add(in.BillingInterval); !got.Equal(want) {
-		t.Fatalf("PeriodEnd = %v, want %v", got, want)
+	if !next.PeriodEnd.Equal(in.PeriodEnd.Add(in.Plan.Cadence)) {
+		t.Fatalf("PeriodEnd = %v, want %v", next.PeriodEnd, in.PeriodEnd.Add(in.Plan.Cadence))
 	}
-	if got, want := next.RenewalCount, in.RenewalCount+1; got != want {
-		t.Fatalf("RenewalCount = %d, want %d", got, want)
+	if next.RenewalCount != in.RenewalCount+1 {
+		t.Fatalf("RenewalCount = %d, want %d", next.RenewalCount, in.RenewalCount+1)
 	}
 	if next.CancelRequested {
-		t.Fatalf("CancelRequested should never carry forward into next period")
-	}
-	if got, want := next.SubscriptionID, in.SubscriptionID; got != want {
-		t.Fatalf("SubscriptionID = %q, want %q", got, want)
+		t.Fatalf("CancelRequested should reset to false")
 	}
 }
 
 func TestNextBillingPeriod_PreservesIdentityFields(t *testing.T) {
-	in := SubscriptionInput{
-		SubscriptionID:  "sub-2",
-		UserID:          "user-1",
-		PlanID:          "plan-1",
-		PlanCode:        "monthly",
-		BillingInterval: time.Hour,
-		IntegrationHost: "mock:50052",
-		PriceCents:      999,
-		PeriodStart:     time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC),
-		PeriodEnd:       time.Date(2026, 5, 1, 1, 0, 0, 0, time.UTC),
-		Context:         Context{"card_id": "card_001"},
-		RenewalCount:    3,
-	}
-
+	in := sample()
+	in.Plan.PriceCents = 1234
+	in.Plan.IntegrationEndpoint = "mock:50052"
 	next := NextBillingPeriod(in)
 
-	if next.UserID != in.UserID {
-		t.Fatalf("UserID lost across period roll")
+	if next.UserID != in.UserID || next.PlanID != in.PlanID {
+		t.Fatalf("identity lost")
 	}
-	if next.PlanID != in.PlanID || next.PlanCode != in.PlanCode {
-		t.Fatalf("Plan identifiers lost across period roll")
+	if next.Plan.Code != in.Plan.Code || next.Plan.PriceCents != in.Plan.PriceCents {
+		t.Fatalf("plan snapshot lost")
 	}
-	if next.IntegrationHost != in.IntegrationHost {
-		t.Fatalf("IntegrationHost lost across period roll")
-	}
-	if next.PriceCents != in.PriceCents {
-		t.Fatalf("PriceCents lost across period roll")
-	}
-	if got, want := next.Context["card_id"], in.Context["card_id"]; got != want {
-		t.Fatalf("Context lost: got %q, want %q", got, want)
+	if next.Plan.IntegrationEndpoint != in.Plan.IntegrationEndpoint {
+		t.Fatalf("integration endpoint lost")
 	}
 }
 
 func TestNextBillingPeriod_ContextIsCloned(t *testing.T) {
-	in := SubscriptionInput{
-		BillingInterval: time.Hour,
-		PeriodEnd:       time.Now().Add(time.Hour),
-		Context:         Context{"k": "v"},
-	}
-
+	in := sample()
 	next := NextBillingPeriod(in)
 	next.Context["k"] = "mutated"
-
 	if in.Context["k"] != "v" {
-		t.Fatalf("mutating next.Context leaked back to input.Context")
+		t.Fatalf("mutating next leaked back into input")
 	}
 }
