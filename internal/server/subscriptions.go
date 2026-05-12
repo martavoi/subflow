@@ -194,7 +194,7 @@ func (s *SubscriptionService) ListSubscriptions(ctx context.Context, req *subflo
 
 func (s *SubscriptionService) countActiveForUser(ctx context.Context, userID, planCode string) (int64, error) {
 	q := fmt.Sprintf(
-		"WorkflowType='SubscriptionWorkflow' AND %s='%s' AND %s='%s' AND %s IN ('trialing','active','past_due','canceled')",
+		"WorkflowType='SubscriptionWorkflow' AND ExecutionStatus='Running' AND %s='%s' AND %s='%s' AND %s IN ('trialing','active','past_due','canceled')",
 		subflowtemporal.AttrUserId, userID,
 		subflowtemporal.AttrPlanCode, planCode,
 		subflowtemporal.AttrPhase,
@@ -210,7 +210,9 @@ func (s *SubscriptionService) countActiveForUser(ctx context.Context, userID, pl
 }
 
 func buildListQuery(req *subflowv1.ListSubscriptionsRequest) string {
-	parts := []string{"WorkflowType='SubscriptionWorkflow'"}
+	// ExecutionStatus='Running' excludes closed CAN runs — Visibility indexes
+	// every run separately, but only the live run represents the subscription.
+	parts := []string{"WorkflowType='SubscriptionWorkflow'", "ExecutionStatus='Running'"}
 	if req.UserId != "" {
 		parts = append(parts, fmt.Sprintf("%s='%s'", subflowtemporal.AttrUserId, req.UserId))
 	}
