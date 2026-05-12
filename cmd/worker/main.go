@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/martavoi/subflow/internal/activity"
+	"github.com/martavoi/subflow/internal/billing"
 	"github.com/martavoi/subflow/internal/config"
-	"github.com/martavoi/subflow/internal/eventbus"
 	"github.com/martavoi/subflow/internal/integration"
 	"github.com/martavoi/subflow/internal/store"
 	wfpkg "github.com/martavoi/subflow/internal/workflow"
@@ -40,6 +40,12 @@ func main() {
 	}
 	defer mongoClient.Disconnect(context.Background())
 
+	billingStore := billing.NewMongoStore(db)
+	if err := billingStore.EnsureIndexes(ctx); err != nil {
+		logger.Error("billing indexes", "err", err)
+		os.Exit(1)
+	}
+
 	tc, err := client.Dial(client.Options{
 		HostPort:  cfg.TemporalHost,
 		Namespace: cfg.TemporalNamespace,
@@ -50,7 +56,6 @@ func main() {
 	}
 	defer tc.Close()
 
-	publisher := eventbus.NewStdoutPublisher(logger)
 	intClient := integration.NewClient()
 	defer intClient.Close()
 
@@ -58,18 +63,27 @@ func main() {
 		TransientFailureRate: cfg.PaymentTransientRate,
 		TerminalFailureRate:  cfg.PaymentTerminalRate,
 	}
-	eventActs := &activity.EventActivities{Publisher: publisher}
-	intActs := &activity.IntegrationActivities{Client: intClient}
-	projectionActs := &activity.ProjectionActivities{
-		Repo: store.NewSubscriptionProjectionRepository(db),
-	}
+	billingActs := &activity.BillingActivities{Events: billingStore}
+	hookActs := &activity.HookActivities{Client: intClient}
 
 	w := worker.New(tc, cfg.TaskQueue, worker.Options{})
 	w.RegisterWorkflow(wfpkg.SubscriptionWorkflow)
+
+	// Core activities
 	w.RegisterActivityWithOptions(paymentActs.ChargePayment, tactivity.RegisterOptions{Name: "ChargePayment"})
-	w.RegisterActivityWithOptions(eventActs.PublishSubscriptionEvent, tactivity.RegisterOptions{Name: "PublishSubscriptionEvent"})
-	w.RegisterActivityWithOptions(intActs.NotifyIntegrationService, tactivity.RegisterOptions{Name: "NotifyIntegrationService"})
-	w.RegisterActivityWithOptions(projectionActs.UpdateSubscriptionProjection, tactivity.RegisterOptions{Name: "UpdateSubscriptionProjection"})
+	w.RegisterActivityWithOptions(billingActs.RecordBillingEvent, tactivity.RegisterOptions{Name: "RecordBillingEvent"})
+
+	// 10 hook activities
+	w.RegisterActivityWithOptions(hookActs.OnTrialStarted, tactivity.RegisterOptions{Name: "OnTrialStarted"})
+	w.RegisterActivityWithOptions(hookActs.OnTrialWillEnd, tactivity.RegisterOptions{Name: "OnTrialWillEnd"})
+	w.RegisterActivityWithOptions(hookActs.OnActivated, tactivity.RegisterOptions{Name: "OnActivated"})
+	w.RegisterActivityWithOptions(hookActs.OnRenewed, tactivity.RegisterOptions{Name: "OnRenewed"})
+	w.RegisterActivityWithOptions(hookActs.OnPastDue, tactivity.RegisterOptions{Name: "OnPastDue"})
+	w.RegisterActivityWithOptions(hookActs.OnRecovered, tactivity.RegisterOptions{Name: "OnRecovered"})
+	w.RegisterActivityWithOptions(hookActs.OnCanceled, tactivity.RegisterOptions{Name: "OnCanceled"})
+	w.RegisterActivityWithOptions(hookActs.OnDeactivated, tactivity.RegisterOptions{Name: "OnDeactivated"})
+	w.RegisterActivityWithOptions(hookActs.OnPaymentSucceeded, tactivity.RegisterOptions{Name: "OnPaymentSucceeded"})
+	w.RegisterActivityWithOptions(hookActs.OnPaymentFailed, tactivity.RegisterOptions{Name: "OnPaymentFailed"})
 
 	logger.Info("subflow-worker starting", "task_queue", cfg.TaskQueue)
 	if err := w.Run(worker.InterruptCh()); err != nil {
