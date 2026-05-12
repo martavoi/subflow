@@ -10,19 +10,22 @@ import (
 	"time"
 
 	subflowv1 "github.com/martavoi/subflow/api/v1"
+	"github.com/martavoi/subflow/internal/billing"
 	"github.com/martavoi/subflow/internal/config"
 	"github.com/martavoi/subflow/internal/server"
 	"github.com/martavoi/subflow/internal/store"
+	subflowtemporal "github.com/martavoi/subflow/internal/temporal"
 	"go.temporal.io/sdk/client"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
 
-// AggregateService composes plan + subscription services into a single
-// SubflowService gRPC implementation.
+// AggregateService composes plan + subscription + billing services into the
+// single SubflowService gRPC implementation.
 type AggregateService struct {
 	*server.PlanService
 	*server.SubscriptionService
+	*server.BillingEventsService
 }
 
 func main() {
@@ -37,6 +40,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Mongo
 	mongoCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	mongoClient, db, err := store.Connect(mongoCtx, cfg.MongoURI, cfg.MongoDatabase)
@@ -47,17 +51,18 @@ func main() {
 	defer mongoClient.Disconnect(context.Background())
 
 	planRepo := store.NewPlanRepository(db)
-	projection := store.NewSubscriptionProjectionRepository(db)
-
 	if err := planRepo.EnsureIndexes(ctx); err != nil {
 		logger.Error("plan indexes", "err", err)
 		os.Exit(1)
 	}
-	if err := projection.EnsureIndexes(ctx); err != nil {
-		logger.Error("projection indexes", "err", err)
+
+	billingStore := billing.NewMongoStore(db)
+	if err := billingStore.EnsureIndexes(ctx); err != nil {
+		logger.Error("billing indexes", "err", err)
 		os.Exit(1)
 	}
 
+	// Temporal
 	tc, err := client.Dial(client.Options{
 		HostPort:  cfg.TemporalHost,
 		Namespace: cfg.TemporalNamespace,
@@ -68,15 +73,25 @@ func main() {
 	}
 	defer tc.Close()
 
+	// Register custom search attributes (idempotent).
+	saCtx, saCancel := context.WithTimeout(ctx, 15*time.Second)
+	if err := subflowtemporal.EnsureSearchAttributes(saCtx, tc, cfg.TemporalNamespace, logger); err != nil {
+		saCancel()
+		logger.Error("ensure search attributes", "err", err)
+		os.Exit(1)
+	}
+	saCancel()
+
+	// gRPC server
 	svc := &AggregateService{
 		PlanService: &server.PlanService{Repo: planRepo},
 		SubscriptionService: &server.SubscriptionService{
-			Temporal:           tc,
-			TaskQueue:          cfg.TaskQueue,
-			PlanRepo:           planRepo,
-			Projection:         projection,
-			DefaultIntegration: cfg.IntegrationHost,
+			Temporal:  tc,
+			Namespace: cfg.TemporalNamespace,
+			TaskQueue: cfg.TaskQueue,
+			PlanRepo:  planRepo,
 		},
+		BillingEventsService: &server.BillingEventsService{Events: billingStore},
 	}
 
 	g := grpc.NewServer()
