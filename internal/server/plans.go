@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	subflowv1 "github.com/martavoi/subflow/api/v1"
@@ -13,24 +15,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// PlanService implements the plan-related RPCs on SubflowService.
 type PlanService struct {
 	Repo *store.PlanRepository
 }
 
 func (s *PlanService) CreatePlan(ctx context.Context, req *subflowv1.CreatePlanRequest) (*subflowv1.Plan, error) {
-	dur, err := time.ParseDuration(req.BillingInterval)
+	p, err := buildPlanFromRequest(req)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "billing_interval %q is not a valid Go duration: %v", req.BillingInterval, err)
-	}
-	p := plan.Plan{
-		ID:                  uuid.NewString(),
-		Code:                req.Code,
-		Name:                req.Name,
-		BillingInterval:     dur,
-		PriceCents:          req.PriceCents,
-		IntegrationEndpoint: req.IntegrationEndpoint,
-		CreatedAt:           time.Now().UTC(),
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 	if err := s.Repo.Insert(ctx, p); err != nil {
 		return nil, status.Errorf(codes.Internal, "insert plan: %v", err)
@@ -71,13 +63,102 @@ func (s *PlanService) DeletePlan(ctx context.Context, req *subflowv1.DeletePlanR
 	return &subflowv1.DeletePlanResponse{}, nil
 }
 
-func planToProto(p plan.Plan) *subflowv1.Plan {
-	return &subflowv1.Plan{
-		Id:                  p.ID,
-		Code:                p.Code,
-		Name:                p.Name,
-		BillingInterval:     p.BillingInterval.String(),
-		PriceCents:          p.PriceCents,
-		IntegrationEndpoint: p.IntegrationEndpoint,
+func buildPlanFromRequest(req *subflowv1.CreatePlanRequest) (plan.Plan, error) {
+	cadence, err := time.ParseDuration(req.Cadence)
+	if err != nil || cadence <= 0 {
+		return plan.Plan{}, fmt.Errorf("cadence %q invalid (must be positive Go duration)", req.Cadence)
 	}
+	trial, err := parseOptionalDuration(req.TrialDuration)
+	if err != nil {
+		return plan.Plan{}, fmt.Errorf("trial_duration: %w", err)
+	}
+	notice, err := parseOptionalDuration(req.TrialEndNoticeBefore)
+	if err != nil {
+		return plan.Plan{}, fmt.Errorf("trial_end_notice_before: %w", err)
+	}
+	if notice > 0 && trial > 0 && notice >= trial {
+		return plan.Plan{}, fmt.Errorf("trial_end_notice_before (%s) must be less than trial_duration (%s)", notice, trial)
+	}
+	backoff, err := parseOptionalDuration(req.DunningRetryBackoff)
+	if err != nil {
+		return plan.Plan{}, fmt.Errorf("dunning_retry_backoff: %w", err)
+	}
+	if req.DunningMaxAttempts < 0 || req.DunningMaxAttempts > 99 {
+		return plan.Plan{}, fmt.Errorf("dunning_max_attempts %d out of range [0,99]", req.DunningMaxAttempts)
+	}
+	if req.PriceCents < 0 {
+		return plan.Plan{}, fmt.Errorf("price_cents must be >= 0")
+	}
+	if req.PerUserLimit < 0 {
+		return plan.Plan{}, fmt.Errorf("per_user_limit must be >= 0 (0 = unlimited)")
+	}
+	hooks, err := plan.ParseHookNames(req.EnabledHooks)
+	if err != nil {
+		return plan.Plan{}, err
+	}
+
+	currency := strings.ToUpper(req.Currency)
+	if currency == "" {
+		currency = "USD"
+	}
+	dunningMaxAttempts := int(req.DunningMaxAttempts)
+	if dunningMaxAttempts == 0 {
+		dunningMaxAttempts = 3
+	}
+	if backoff == 0 {
+		backoff = 24 * time.Hour
+	}
+
+	return plan.Plan{
+		ID:                   uuid.NewString(),
+		Code:                 req.Code,
+		Name:                 req.Name,
+		Cadence:              cadence,
+		PriceCents:           req.PriceCents,
+		Currency:             currency,
+		PerUserLimit:         int(req.PerUserLimit),
+		TrialDuration:        trial,
+		TrialEndNoticeBefore: notice,
+		DunningMaxAttempts:   dunningMaxAttempts,
+		DunningRetryBackoff:  backoff,
+		IntegrationEndpoint:  req.IntegrationEndpoint,
+		EnabledHooks:         hooks,
+		CreatedAt:            time.Now().UTC(),
+	}, nil
+}
+
+func parseOptionalDuration(s string) (time.Duration, error) {
+	if s == "" {
+		return 0, nil
+	}
+	return time.ParseDuration(s)
+}
+
+func planToProto(p plan.Plan) *subflowv1.Plan {
+	hookStrings := make([]string, len(p.EnabledHooks))
+	for i, h := range p.EnabledHooks {
+		hookStrings[i] = string(h)
+	}
+	return &subflowv1.Plan{
+		Id:                   p.ID,
+		Code:                 p.Code,
+		Name:                 p.Name,
+		Cadence:              p.Cadence.String(),
+		PriceCents:           p.PriceCents,
+		Currency:             p.Currency,
+		PerUserLimit:         int32(p.PerUserLimit),
+		TrialDuration:        durationOrEmpty(p.TrialDuration),
+		TrialEndNoticeBefore: durationOrEmpty(p.TrialEndNoticeBefore),
+		DunningMaxAttempts:   int32(p.DunningMaxAttempts),
+		DunningRetryBackoff:  durationOrEmpty(p.DunningRetryBackoff),
+		IntegrationEndpoint:  p.IntegrationEndpoint,
+		EnabledHooks:         hookStrings,
+	}
+}
+
+func durationOrEmpty(d time.Duration) string {
+	if d == 0 {
+		return ""
+	}
+	return d.String()
 }
