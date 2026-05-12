@@ -1,26 +1,63 @@
 # subflow ↔ Temporal cheat sheet
 
-| Subscription concept | Temporal primitive | Where in code |
+## Concept mapping
+
+| Subscription concept | Temporal primitive | Code location |
 |---|---|---|
 | Subscription instance | Workflow execution (ID `subscription:<id>`) | `internal/workflow/subscription.go` |
-| Sync activation in API response | Update `subscription.activate` invoked via `client.UpdateWithStartWorkflow` | `UpdateActivate` constant + handler in `subscription.go`; caller in `internal/server/subscriptions.go` |
-| Renewal cadence | `workflow.NewTimer` durable timer | `AwaitPeriodEndOrCancellation` in `internal/workflow/lifecycle.go` |
-| End of subscription period | Continue-As-New | `ContinueIntoNextPeriod` |
-| Cancel request | Signal `subscription.cancel` | `SignalCancelSubscription` constant |
-| Status read | Query `subscription.status` | `QuerySubscriptionStatus` constant + `SubscriptionState.AsStatus` |
-| Charge / publish / integration call | Activities with named retry policy | `internal/activity/*.go` |
-| Mutable subscription context | Workflow state (carried in `SubscriptionInput.Context`) | `internal/domain/subscription/context.go` |
-| Read-model for listing | Mongo `subscriptions_view` updated by `UpdateSubscriptionProjection` activity | `internal/store/projection.go` |
-| Idempotency token | `<workflowID>:<runID>:<suffix>` | `activityRef` in `internal/workflow/lifecycle.go` |
+| Sync activation | Update `subscription.activate` via `client.UpdateWithStartWorkflow` | `internal/workflow/activation.go` + `internal/server/subscriptions.go` |
+| Renewal cadence | `workflow.NewTimer` durable timer | `internal/workflow/cancellation.go` |
+| End of period | `workflow.NewContinueAsNewError` | `internal/workflow/continuation.go` |
+| Cancel | Signal `subscription.cancel` | `SignalCancelSubscription` constant |
+| Update context | Signal `subscription.update_context` | `SignalUpdateContext` constant |
+| Status read | Query `subscription.status` | `internal/workflow/handlers.go` AsStatus |
+| List/filter subscriptions | `client.ListWorkflow` + custom search attributes | `internal/server/subscriptions.go` |
+| Per-user limit | `client.CountWorkflow` | `internal/server/subscriptions.go` countActiveForUser |
+| Charge | Activity `ChargePayment` with retry policy | `internal/activity/payment.go` |
+| Billing history | Activity `RecordBillingEvent` writing to `billing_events` | `internal/activity/billing.go` + `internal/billing/mongo_store.go` |
+| Lifecycle hooks | 10 activities dispatching to gRPC integration | `internal/activity/hooks.go` |
+| Dunning loop | `workflow.Sleep` + `workflow.UpsertSearchAttributes` | `internal/workflow/dunning.go` |
+| Idempotency token | `<workflowID>:<runID>:<purpose>` | `(*Subscription).idempotencyKey` |
 
-## Things to play with in the Web UI (http://localhost:8233)
+## Custom search attributes
 
-1. **Find a running subscription workflow.** It's `subscription:<uuid>`. Open it.
-2. **Look at "Pending Activities"** — when mock-integration is down, this fills with retries.
-3. **Click "Continue As New"** events in the history — each renewal is one of these.
-4. **Send a signal from the UI**: Workflow → Send Signal → `subscription.cancel`. Watch the timer fire at period end and deactivation activities run.
-5. **Run a query from the UI**: Workflow → Query → `subscription.status`. Returns the live in-memory state.
+| Name | Type | Set at start? | Upserted by workflow? |
+|---|---|---|---|
+| `SubflowUserId` | Keyword | Yes (`StartWorkflowOptions`) | No (immutable; carried by CAN) |
+| `SubflowPlanCode` | Keyword | Yes | No (immutable; carried by CAN) |
+| `SubflowPhase` | Keyword | Yes (initial) | Yes (`transitionTo` on every state change) |
+| `SubflowPeriodEnd` | Datetime | Yes | Yes (`ContinueIntoNextPeriod` updates before CAN) |
+| `SubflowTrialEnd` | Datetime | Conditionally (when `TrialDuration > 0`) | Set in `Trial()` |
 
-## Why Continue-As-New per renewal (not every N renewals)?
+Search attribute values are **carried across Continue-As-New automatically by the Temporal server** — only call `UpsertSearchAttributes` when a value actually changes.
 
-Each billing period is its own discrete run with bounded history (~20 events). The workflow ID never changes; signals and queries continue to address the latest run automatically. This keeps history footprint identical for a 1-year and a 50-year subscription, and makes each period visible as one row in the UI — the renewal history *is* the workflow history.
+## Visibility queries you can run
+
+```sql
+-- All active subscriptions for a user
+SubflowUserId='alice' AND SubflowPhase='active'
+
+-- Subscriptions expiring in the next 7 days
+SubflowPhase='active' AND SubflowPeriodEnd < '2026-05-19T00:00:00Z'
+
+-- Premium-plan past_due (dunning candidates)
+SubflowPlanCode='premium' AND SubflowPhase='past_due'
+
+-- All terminal subscriptions (closed workflows still indexed for the retention window)
+SubflowPhase='deactivated'
+
+-- Trial subscriptions ending today
+SubflowPhase='trialing' AND SubflowTrialEnd < '2026-05-13T00:00:00Z'
+```
+
+## Things to try in the Web UI (http://localhost:8233)
+
+1. **Open a subscription workflow** (search by `WorkflowId STARTS_WITH 'subscription:'`). Watch each CAN run appear as a discrete row in the execution chain.
+2. **Check pending activities** when `mock-integration` is down (`task break-integration`) — hooks accumulate retries with exponential backoff.
+3. **Send a query from the UI**: Workflow → Query → `subscription.status`. Returns the live snapshot.
+4. **Send a signal from the UI**: Workflow → Send Signal → `subscription.cancel`. Watch the workflow honor end-of-period.
+5. **Run `temporal operator search-attribute list`** to confirm `SubflowUserId/PlanCode/Phase/PeriodEnd/TrialEnd` are registered.
+
+## Why Continue-As-New per renewal?
+
+Each billing period is its own discrete run with bounded history (~20 events). The workflow ID never changes; signals and queries continue to address the latest run. Keeps history footprint identical for a 1-year and a 50-year subscription, and makes each period visible as one row in the UI. CAN auto-carries search attributes, so the next run inherits all filtering visibility without re-upserting (except `SubflowPeriodEnd`, which changes per period).
