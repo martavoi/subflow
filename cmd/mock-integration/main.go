@@ -18,61 +18,89 @@ import (
 )
 
 type server struct {
-	subflowv1.UnimplementedIntegrationServiceServer
+	subflowv1.UnimplementedSubscriptionHooksServer
 
 	failureRate         float64
 	terminalFailureRate float64
 	latency             time.Duration
 	logger              *slog.Logger
 
-	mu    sync.Mutex
-	cache map[string]*subflowv1.IntegrationResponse // reference -> cached response
+	mu      sync.Mutex
+	seenRef map[string]bool
 }
 
-func (s *server) HandleEvent(ctx context.Context, ev *subflowv1.IntegrationEvent) (*subflowv1.IntegrationResponse, error) {
+func (s *server) maybeFail(hook, reference string) error {
 	if s.latency > 0 {
 		time.Sleep(s.latency)
 	}
-
 	s.mu.Lock()
-	if cached, ok := s.cache[ev.Reference]; ok {
+	if s.seenRef[reference] {
 		s.mu.Unlock()
-		s.logger.Info("idempotency cache hit", "reference", ev.Reference)
-		return cached, nil
+		s.logger.Info("idempotent replay", "hook", hook, "reference", reference)
+		return nil
 	}
 	s.mu.Unlock()
 
-	// Inject failures (only on first attempt; cached responses bypass).
 	r := rand.Float64()
-	switch {
-	case r < s.terminalFailureRate:
-		s.logger.Warn("injecting terminal failure", "reference", ev.Reference)
-		return nil, status.Error(codes.FailedPrecondition, "injected terminal failure")
-	case r < s.terminalFailureRate+s.failureRate:
-		s.logger.Warn("injecting transient failure", "reference", ev.Reference)
-		return nil, status.Error(codes.Unavailable, "injected transient failure")
+	if r < s.terminalFailureRate {
+		s.logger.Warn("injected terminal", "hook", hook, "reference", reference)
+		return status.Error(codes.FailedPrecondition, "injected terminal failure")
 	}
-
-	out := &subflowv1.IntegrationResponse{UpdatedContext: map[string]string{}}
-	for k, v := range ev.Context {
-		out.UpdatedContext[k] = v
+	if r < s.terminalFailureRate+s.failureRate {
+		s.logger.Warn("injected transient", "hook", hook, "reference", reference)
+		return status.Error(codes.Unavailable, "injected transient failure")
 	}
-	out.UpdatedContext["last_event"] = ev.EventType
-	out.UpdatedContext["last_handled_at"] = time.Now().UTC().Format(time.RFC3339)
 
 	s.mu.Lock()
-	s.cache[ev.Reference] = out
+	s.seenRef[reference] = true
 	s.mu.Unlock()
+	s.logger.Info("hook handled", "hook", hook, "reference", reference)
+	return nil
+}
 
-	s.logger.Info("handled event", "reference", ev.Reference, "type", ev.EventType, "user", ev.UserId)
-	return out, nil
+func (s *server) OnTrialStarted(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
+	return ack(s.maybeFail("OnTrialStarted", ev.Reference))
+}
+func (s *server) OnTrialWillEnd(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
+	return ack(s.maybeFail("OnTrialWillEnd", ev.Reference))
+}
+func (s *server) OnActivated(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
+	return ack(s.maybeFail("OnActivated", ev.Reference))
+}
+func (s *server) OnRenewed(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
+	return ack(s.maybeFail("OnRenewed", ev.Reference))
+}
+func (s *server) OnPastDue(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
+	return ack(s.maybeFail("OnPastDue", ev.Reference))
+}
+func (s *server) OnRecovered(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
+	return ack(s.maybeFail("OnRecovered", ev.Reference))
+}
+func (s *server) OnCanceled(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
+	return ack(s.maybeFail("OnCanceled", ev.Reference))
+}
+func (s *server) OnDeactivated(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
+	return ack(s.maybeFail("OnDeactivated", ev.Reference))
+}
+func (s *server) OnPaymentSucceeded(_ context.Context, ev *subflowv1.PaymentEvent) (*subflowv1.HookAck, error) {
+	return ack(s.maybeFail("OnPaymentSucceeded", ev.Reference))
+}
+func (s *server) OnPaymentFailed(_ context.Context, ev *subflowv1.PaymentEvent) (*subflowv1.HookAck, error) {
+	return ack(s.maybeFail("OnPaymentFailed", ev.Reference))
+}
+
+func ack(err error) (*subflowv1.HookAck, error) {
+	if err != nil {
+		return nil, err
+	}
+	return &subflowv1.HookAck{}, nil
 }
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	port := getenv("MOCK_GRPC_PORT", "50052")
-	failureRate := mustFloat(getenv("FAILURE_RATE", "0.3"))
+	failureRate := mustFloat(getenv("FAILURE_RATE", "0.0"))
 	terminalRate := mustFloat(getenv("TERMINAL_FAILURE_RATE", "0.0"))
 	latencyMs := mustInt(getenv("LATENCY_MS", "0"))
 
@@ -87,11 +115,11 @@ func main() {
 		terminalFailureRate: terminalRate,
 		latency:             time.Duration(latencyMs) * time.Millisecond,
 		logger:              logger,
-		cache:               make(map[string]*subflowv1.IntegrationResponse),
+		seenRef:             make(map[string]bool),
 	}
 
 	g := grpc.NewServer()
-	subflowv1.RegisterIntegrationServiceServer(g, s)
+	subflowv1.RegisterSubscriptionHooksServer(g, s)
 
 	logger.Info("mock-integration listening", "port", port,
 		"failure_rate", failureRate, "terminal_failure_rate", terminalRate, "latency_ms", latencyMs)
