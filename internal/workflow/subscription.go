@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -84,11 +85,42 @@ func SubscriptionWorkflow(ctx workflow.Context, in subscription.SubscriptionInpu
 	return NewSubscription(in).Run(ctx)
 }
 
-// Run is the workflow body. Stub for now — populated by T21 once all
-// lifecycle methods exist.
+// Run is the entity workflow body. Branches on first-period (with or without
+// trial) vs renewal; on renewal, routes to dunning on failure; awaits period
+// end or cancel; deactivates or CANs into the next period.
 func (s *Subscription) Run(ctx workflow.Context) error {
-	_ = ctx
-	return nil
+	if err := s.registerHandlers(ctx); err != nil {
+		return err
+	}
+
+	if s.RenewalCount == 0 {
+		if s.Plan.TrialDuration > 0 {
+			outcome, err := s.Trial(ctx)
+			if err != nil {
+				return s.Deactivate(ctx)
+			}
+			if outcome == trialOutcomeCanceled {
+				return s.Deactivate(ctx)
+			}
+		}
+		if err := s.AwaitActivation(ctx); err != nil {
+			return s.Deactivate(ctx)
+		}
+	} else {
+		if err := s.Renew(ctx); err != nil {
+			if dunErr := s.HandleDunning(ctx); dunErr != nil {
+				if errors.Is(dunErr, ErrDunningExhausted) {
+					return s.Deactivate(ctx)
+				}
+				return dunErr
+			}
+		}
+	}
+
+	if cancelled := s.AwaitPeriodEndOrCancellation(ctx); cancelled {
+		return s.Deactivate(ctx)
+	}
+	return s.ContinueIntoNextPeriod(ctx)
 }
 
 // ActivationResult is the response to the UpdateActivate update — returned
