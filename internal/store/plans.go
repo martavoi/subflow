@@ -23,9 +23,10 @@ type planDoc struct {
 	PriceCents           int64           `bson:"price_cents"`
 	Currency             string          `bson:"currency"`
 	PerUserLimit         int             `bson:"per_user_limit"`
-	TrialDuration        string          `bson:"trial_duration"`
-	TrialEndNoticeBefore string          `bson:"trial_end_notice_before"`
-	DunningMaxAttempts   int             `bson:"dunning_max_attempts"`
+	TrialDuration          string      `bson:"trial_duration"`
+	TrialEndNoticeBefore   string      `bson:"trial_end_notice_before"`
+	RenewalUpcomingBefore  string      `bson:"renewal_upcoming_before"`
+	DunningMaxAttempts     int         `bson:"dunning_max_attempts"`
 	DunningRetryBackoff  string          `bson:"dunning_retry_backoff"`
 	IntegrationEndpoint  string          `bson:"integration_endpoint"`
 	EnabledHooks         []hook.Type `bson:"enabled_hooks"`
@@ -119,9 +120,10 @@ func planToDoc(p plan.Plan) planDoc {
 		PriceCents:           p.PriceCents,
 		Currency:             p.Currency,
 		PerUserLimit:         p.PerUserLimit,
-		TrialDuration:        durationOrEmpty(p.TrialDuration),
-		TrialEndNoticeBefore: durationOrEmpty(p.TrialEndNoticeBefore),
-		DunningMaxAttempts:   p.DunningMaxAttempts,
+		TrialDuration:         durationOrEmpty(p.TrialDuration),
+		TrialEndNoticeBefore:  durationOrEmpty(p.TrialEndNoticeBefore),
+		RenewalUpcomingBefore: durationOrEmpty(p.RenewalUpcomingBefore),
+		DunningMaxAttempts:    p.DunningMaxAttempts,
 		DunningRetryBackoff:  durationOrEmpty(p.DunningRetryBackoff),
 		IntegrationEndpoint:  p.IntegrationEndpoint,
 		EnabledHooks:         append([]hook.Type(nil), p.EnabledHooks...),
@@ -142,6 +144,10 @@ func docToPlan(d planDoc) (plan.Plan, error) {
 	if err != nil {
 		return plan.Plan{}, fmt.Errorf("parse trial_end_notice_before: %w", err)
 	}
+	renewalNotice, err := parseOptional(d.RenewalUpcomingBefore)
+	if err != nil {
+		return plan.Plan{}, fmt.Errorf("parse renewal_upcoming_before: %w", err)
+	}
 	backoff, err := parseOptional(d.DunningRetryBackoff)
 	if err != nil {
 		return plan.Plan{}, fmt.Errorf("parse dunning_retry_backoff: %w", err)
@@ -154,9 +160,10 @@ func docToPlan(d planDoc) (plan.Plan, error) {
 		PriceCents:           d.PriceCents,
 		Currency:             d.Currency,
 		PerUserLimit:         d.PerUserLimit,
-		TrialDuration:        trial,
-		TrialEndNoticeBefore: notice,
-		DunningMaxAttempts:   d.DunningMaxAttempts,
+		TrialDuration:         trial,
+		TrialEndNoticeBefore:  notice,
+		RenewalUpcomingBefore: renewalNotice,
+		DunningMaxAttempts:    d.DunningMaxAttempts,
 		DunningRetryBackoff:  backoff,
 		IntegrationEndpoint:  d.IntegrationEndpoint,
 		EnabledHooks:         append([]hook.Type(nil), d.EnabledHooks...),

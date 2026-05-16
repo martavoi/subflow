@@ -177,17 +177,17 @@ func (s *Subscription) Dun(ctx workflow.Context) error {
 // transitions to canceled, fires the canceled hook, and sleeps the remainder
 // of the period before returning true.
 //
+// If Plan.RenewalUpcomingBefore > 0 and the notice timestamp is in the future,
+// a two-phase wait is used: first wait until the notice timestamp (firing
+// hook.RenewalUpcoming on arrival), then wait until the period end. Cancel
+// at any point during either phase takes the cancel path.
+//
 // Returns true if canceled, false on natural period end.
 func (s *Subscription) AwaitEnd(ctx workflow.Context) bool {
 	// If cancel was already requested (e.g., signal during dunning), transition
 	// immediately and sleep out the remainder.
 	if s.CancelRequested {
-		s.transitionTo(ctx, PhaseCanceled)
-		_ = s.fireLifecycle(ctx, hook.Canceled)
-		if remaining := s.Period.End.Sub(workflow.Now(ctx)); remaining > 0 {
-			_ = workflow.Sleep(ctx, remaining)
-		}
-		return true
+		return s.cancelAndSleep(ctx)
 	}
 
 	now := workflow.Now(ctx)
@@ -195,20 +195,38 @@ func (s *Subscription) AwaitEnd(ctx workflow.Context) bool {
 		return s.CancelRequested
 	}
 
-	// AwaitWithTimeout wakes when condition() becomes true (cancel signal set
-	// CancelRequested) or the timeout elapses. ok=false means timed out
-	// (period ended naturally); ok=true means cancel arrived first.
+	// Phase 1: optional renewal-upcoming notice.
+	if s.Plan.RenewalUpcomingBefore > 0 {
+		noticeAt := s.Period.End.Add(-s.Plan.RenewalUpcomingBefore)
+		if noticeAt.After(now) {
+			// Wait until noticeAt or cancel.
+			ok, _ := workflow.AwaitWithTimeout(ctx, noticeAt.Sub(now), func() bool {
+				return s.CancelRequested
+			})
+			if ok {
+				// Cancel arrived before notice timestamp.
+				return s.cancelAndSleep(ctx)
+			}
+			// Notice timestamp reached — fire the hook and continue to phase 2.
+			_ = s.fireLifecycle(ctx, hook.RenewalUpcoming)
+			now = workflow.Now(ctx)
+		}
+	}
+
+	// Phase 2: wait until period end or cancel.
 	ok, _ := workflow.AwaitWithTimeout(ctx, s.Period.End.Sub(now), func() bool {
 		return s.CancelRequested
 	})
-
-	// ok=false: timer fired before cancel — period ended naturally.
 	if !ok {
+		// Timer fired before cancel — period ended naturally.
 		return false
 	}
+	return s.cancelAndSleep(ctx)
+}
 
-	// Cancel arrived during the wait. Mark canceled, fire hook, sleep the
-	// remainder, then return true.
+// cancelAndSleep handles the cancel-during-period path: transitions to
+// canceled, fires the canceled hook, sleeps the remaining period, returns true.
+func (s *Subscription) cancelAndSleep(ctx workflow.Context) bool {
 	s.transitionTo(ctx, PhaseCanceled)
 	_ = s.fireLifecycle(ctx, hook.Canceled)
 	if remaining := s.Period.End.Sub(workflow.Now(ctx)); remaining > 0 {

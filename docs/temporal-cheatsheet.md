@@ -16,8 +16,25 @@
 | Charge | Activity `ChargePayment` with retry policy | `internal/activity/payment.go` |
 | Billing history | Activity `RecordBillingEvent` writing to `billing_events` | `internal/activity/billing.go` + `internal/billing/mongo_store.go` |
 | Lifecycle hooks | 1 activity (`DispatchHook`) dispatching to a single `Dispatch` rpc on the integration | `internal/activity/hooks.go` |
+| Renewal-upcoming notice | `workflow.AwaitWithTimeout` phase-1 timer at `Period.End - RenewalUpcomingBefore` | `internal/workflow/phases.go` `AwaitEnd` |
 | Dunning loop | `workflow.Sleep` + `workflow.UpsertSearchAttributes` | `internal/workflow/dunning.go` |
 | Idempotency token | `<workflowID>:<runID>:<purpose>` | `(*Subscription).idempotencyKey` |
+
+## Hook wire names (11 hooks)
+
+| Wire name | Fires when |
+|---|---|
+| `subscription.trial_started` | Workflow enters trialing phase |
+| `subscription.trial_will_end` | `TrialEndNoticeBefore` before trial ends |
+| `subscription.renewal_upcoming` | `RenewalUpcomingBefore` before a paid renewal Charge |
+| `subscription.activated` | First payment succeeded |
+| `subscription.renewed` | Nth payment succeeded (N ≥ 1) |
+| `subscription.past_due` | Renewal charge failed, entering dunning |
+| `subscription.recovered` | Dunning retry succeeded |
+| `subscription.canceled` | Cancel signal received |
+| `subscription.deactivated` | Workflow ending (terminal) |
+| `payment.succeeded` | Each successful charge |
+| `payment.failed` | Each failed charge attempt |
 
 ## Custom search attributes
 

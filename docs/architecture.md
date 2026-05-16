@@ -50,6 +50,22 @@
 | `temporal` | Single-binary dev server. SQLite persistence (workflow histories + visibility index). Bundled Web UI on :8233. Custom search attributes registered idempotently at startup. |
 | `mongo` | Mongo 7. Holds `plans` (source of truth for plan config) and `billing_events` (append-only charge history). |
 
+## Hook taxonomy (11 hooks)
+
+| Hook | Fires when |
+|---|---|
+| `subscription.trial_started` | Workflow enters trialing phase |
+| `subscription.trial_will_end` | `TrialEndNoticeBefore` before trial ends |
+| `subscription.renewal_upcoming` | `RenewalUpcomingBefore` before a paid renewal Charge — Stripe `invoice.upcoming` analog |
+| `subscription.activated` | First payment succeeded |
+| `subscription.renewed` | Nth payment succeeded (N ≥ 1) |
+| `subscription.past_due` | Renewal charge failed, entering dunning |
+| `subscription.recovered` | Dunning retry succeeded |
+| `subscription.canceled` | Cancel signal received, end-of-period deactivation pending |
+| `subscription.deactivated` | Workflow ending (terminal) |
+| `payment.succeeded` | Each successful charge |
+| `payment.failed` | Each failed charge attempt |
+
 ## Why this shape?
 
 - **Workflow as entity.** Each subscription is one workflow execution (per period, via Continue-As-New). State + behavior co-located on the `Subscription` struct. No projection mirror in a side DB.

@@ -68,8 +68,10 @@ tasks:
           "dunning_max_attempts": 3,
           "dunning_retry_backoff": "5s",
           "integration_endpoint": "mock-integration:50052",
+          "renewal_upcoming_before": "10s",
           "enabled_hooks": [
             "subscription.trial_started","subscription.trial_will_end",
+            "subscription.renewal_upcoming",
             "subscription.activated","subscription.renewed",
             "subscription.past_due","subscription.recovered",
             "subscription.canceled","subscription.deactivated",

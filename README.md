@@ -21,7 +21,7 @@ A minimal, open-source-friendly Go playground that models a subscription lifecyc
                                          └────── retry succeeds ──▶ active
 ```
 
-5 phases. 10 optional notification hooks. Continue-As-New per billing period.
+5 phases. 11 optional notification hooks. Continue-As-New per billing period.
 
 ## Quickstart
 
@@ -82,12 +82,13 @@ Each charge attempt (success or failure, including dunning retries) is written t
 
 ## Hooks
 
-10 optional notification hooks. Plans declare which they want via `enabled_hooks`. Each hook is a separate gRPC method on the integration service:
+11 optional notification hooks. Plans declare which they want via `enabled_hooks`. Each hook dispatches via a single `DispatchHook` activity calling `Dispatch` on the integration service:
 
 | Hook | Fires when |
 |---|---|
 | `subscription.trial_started` | Workflow enters trialing |
 | `subscription.trial_will_end` | `TrialEndNoticeBefore` before trial ends |
+| `subscription.renewal_upcoming` | `RenewalUpcomingBefore` before paid renewal — Stripe `invoice.upcoming` analog |
 | `subscription.activated` | First payment succeeded |
 | `subscription.renewed` | Nth payment succeeded (N ≥ 1) |
 | `subscription.past_due` | Renewal charge failed, entering dunning |
