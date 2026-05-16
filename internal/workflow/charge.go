@@ -35,14 +35,14 @@ func (s *Subscription) Charge(ctx workflow.Context, purpose chargePurpose, dunni
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy:         activity.ChargePaymentRetry,
 	})
-	chargeIn := activity.ChargePaymentInput{
+	chargeIn := activity.ChargePayment{
 		Reference:   ref,
 		UserID:      s.UserID,
 		PlanCode:    s.PlanCode,
 		AmountCents: s.Plan.PriceCents,
 		Currency:    s.Plan.Currency,
 	}
-	var chargeRes activity.ChargePaymentResult
+	var chargeRes activity.ChargeResult
 	chargeErr := workflow.ExecuteActivity(chargeOpts, "ChargePayment", chargeIn).Get(ctx, &chargeRes)
 
 	now := workflow.Now(ctx)

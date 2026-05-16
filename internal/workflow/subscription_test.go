@@ -63,14 +63,14 @@ func newHookRecord() *hookRecord {
 func registerMocks(env *testsuite.TestWorkflowEnvironment, rec *hookRecord, chargeBehavior func(attempt int) error) {
 	chargeAttempts := 0
 	env.RegisterActivityWithOptions(
-		func(in activityPkg.ChargePaymentInput) (activityPkg.ChargePaymentResult, error) {
+		func(in activityPkg.ChargePayment) (activityPkg.ChargeResult, error) {
 			chargeAttempts++
 			if chargeBehavior != nil {
 				if err := chargeBehavior(chargeAttempts); err != nil {
-					return activityPkg.ChargePaymentResult{}, err
+					return activityPkg.ChargeResult{}, err
 				}
 			}
-			return activityPkg.ChargePaymentResult{
+			return activityPkg.ChargeResult{
 				Reference: in.Reference, TransactionID: "txn", AmountCents: in.AmountCents, Currency: in.Currency,
 			}, nil
 		},
