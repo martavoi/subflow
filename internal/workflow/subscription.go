@@ -33,11 +33,16 @@ type BillingPeriod struct {
 // Subscription is the entity-workflow aggregate root. Every domain verb is a
 // method. All state lives in fields. No I/O — activities do that.
 type Subscription struct {
-	// Identity (immutable)
-	ID       string
-	UserID   string
-	PlanID   string
-	PlanCode string
+	// Identity (immutable within a subscription)
+	SubscriptionID string
+	UserID         string
+	PlanID         string
+	PlanCode       string
+
+	// IntervalID identifies this billing interval (rotated on each CAN).
+	// Combined with SubscriptionID, it produces durable idempotency keys for
+	// charges and hooks — independent of Temporal exec/run IDs.
+	IntervalID string
 
 	// Plan snapshot — immutable for this run
 	Plan plan.Snapshot
@@ -66,7 +71,8 @@ type Subscription struct {
 // Pure; safe to call during workflow replay.
 func NewSubscription(in subscription.SubscriptionInput) *Subscription {
 	return &Subscription{
-		ID:              in.SubscriptionID,
+		SubscriptionID:  in.SubscriptionID,
+		IntervalID:      in.IntervalID,
 		UserID:          in.UserID,
 		PlanID:          in.PlanID,
 		PlanCode:        in.Plan.Code,
@@ -135,14 +141,14 @@ type ActivationResult struct {
 // the invariant: every phase change is observable from outside the workflow.
 func (s *Subscription) transitionTo(ctx workflow.Context, p Phase) {
 	s.Phase = p
-	_ = workflow.UpsertSearchAttributes(ctx, map[string]any{
-		subflowtemporal.AttrPhase: string(p),
-	})
+	_ = workflow.UpsertTypedSearchAttributes(ctx,
+		subflowtemporal.KeyPhase.ValueSet(string(p)),
+	)
 }
 
 // idempotencyKey builds the activity idempotency token. Stable across retries
-// within a run; unique across runs (run ID changes each CAN).
-func (s *Subscription) idempotencyKey(ctx workflow.Context, purpose string) string {
-	info := workflow.GetInfo(ctx)
-	return fmt.Sprintf("%s:%s:%s", info.WorkflowExecution.ID, info.WorkflowExecution.RunID, purpose)
+// within a run; unique across runs because IntervalID rotates on each CAN.
+// Pure on the entity — no Temporal coupling, so it composes freely.
+func (s *Subscription) idempotencyKey(purpose string) string {
+	return fmt.Sprintf("%s:%s:%s", s.SubscriptionID, s.IntervalID, purpose)
 }

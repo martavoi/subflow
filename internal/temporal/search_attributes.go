@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/sdk/client"
+	sdktemporal "go.temporal.io/sdk/temporal"
 )
 
 // Custom search attribute names used by SubscriptionWorkflow.
@@ -19,6 +21,32 @@ const (
 	AttrPeriodEnd = "SubflowPeriodEnd"
 	AttrTrialEnd  = "SubflowTrialEnd"
 )
+
+// Typed keys for the attributes above. Names and constructors must stay aligned
+// with attrTypes / EnsureSearchAttributes.
+var (
+	KeyUserId    = sdktemporal.NewSearchAttributeKeyKeyword(AttrUserId)
+	KeyPlanCode  = sdktemporal.NewSearchAttributeKeyKeyword(AttrPlanCode)
+	KeyPhase     = sdktemporal.NewSearchAttributeKeyKeyword(AttrPhase)
+	KeyPeriodEnd = sdktemporal.NewSearchAttributeKeyTime(AttrPeriodEnd)
+	KeyTrialEnd  = sdktemporal.NewSearchAttributeKeyTime(AttrTrialEnd)
+)
+
+// NewSubscriptionStartSearchAttributes builds the visibility payload for
+// starting SubscriptionWorkflow. Pass non-nil trialEndsAt only when the plan
+// has a trial (same instant as period end at creation).
+func NewSubscriptionStartSearchAttributes(userID, planCode, phase string, periodEnd time.Time, trialEndsAt *time.Time) sdktemporal.SearchAttributes {
+	updates := []sdktemporal.SearchAttributeUpdate{
+		KeyUserId.ValueSet(userID),
+		KeyPlanCode.ValueSet(planCode),
+		KeyPhase.ValueSet(phase),
+		KeyPeriodEnd.ValueSet(periodEnd),
+	}
+	if trialEndsAt != nil {
+		updates = append(updates, KeyTrialEnd.ValueSet(*trialEndsAt))
+	}
+	return sdktemporal.NewSearchAttributes(updates...)
+}
 
 var attrTypes = []struct {
 	Name string

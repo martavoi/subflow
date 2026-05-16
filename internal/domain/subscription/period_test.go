@@ -26,7 +26,7 @@ func sample() SubscriptionInput {
 
 func TestNextBillingPeriod_AdvancesByCadence(t *testing.T) {
 	in := sample()
-	next := NextBillingPeriod(in)
+	next := NextBillingPeriod(in, "interval-next")
 
 	if !next.PeriodStart.Equal(in.PeriodEnd) {
 		t.Fatalf("PeriodStart = %v, want %v", next.PeriodStart, in.PeriodEnd)
@@ -46,7 +46,7 @@ func TestNextBillingPeriod_PreservesIdentityFields(t *testing.T) {
 	in := sample()
 	in.Plan.PriceCents = 1234
 	in.Plan.IntegrationEndpoint = "mock:50052"
-	next := NextBillingPeriod(in)
+	next := NextBillingPeriod(in, "interval-next")
 
 	if next.UserID != in.UserID || next.PlanID != in.PlanID {
 		t.Fatalf("identity lost")
@@ -61,7 +61,7 @@ func TestNextBillingPeriod_PreservesIdentityFields(t *testing.T) {
 
 func TestNextBillingPeriod_ContextIsCloned(t *testing.T) {
 	in := sample()
-	next := NextBillingPeriod(in)
+	next := NextBillingPeriod(in, "interval-next")
 	next.Context["k"] = "mutated"
 	if in.Context["k"] != "v" {
 		t.Fatalf("mutating next leaked back into input")

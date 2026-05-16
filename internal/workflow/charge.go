@@ -23,8 +23,12 @@ const (
 // updates entity summary fields, and fires the matching payment hook.
 // Returns the original charge error so callers (Activate, Renew,
 // HandleDunning) can route the workflow accordingly.
+//
+// Billing-event write is log-and-continue on permanent failure — the charge
+// already happened; workflow history is the forensic fallback if Mongo is
+// permanently down.
 func (s *Subscription) Charge(ctx workflow.Context, purpose chargePurpose, dunningAttempt int) error {
-	ref := s.idempotencyKey(ctx, fmt.Sprintf("charge:%s:%d", purpose, dunningAttempt))
+	ref := s.idempotencyKey(fmt.Sprintf("charge:%s:%d", purpose, dunningAttempt))
 
 	chargeOpts := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
@@ -40,17 +44,6 @@ func (s *Subscription) Charge(ctx workflow.Context, purpose chargePurpose, dunni
 	var chargeRes activity.ChargePaymentResult
 	chargeErr := workflow.ExecuteActivity(chargeOpts, "ChargePayment", chargeIn).Get(ctx, &chargeRes)
 
-	s.recordBillingEvent(ctx, ref, dunningAttempt, chargeRes, chargeErr)
-	s.applyChargeOutcome(ctx, chargeRes, chargeErr, dunningAttempt)
-
-	return chargeErr
-}
-
-// recordBillingEvent writes an append-only billing record for this charge
-// attempt. Idempotent at the EventStore layer. Log-and-continue on permanent
-// failure — the charge already happened; workflow history is the forensic
-// fallback if Mongo is permanently down.
-func (s *Subscription) recordBillingEvent(ctx workflow.Context, ref string, dunningAttempt int, res activity.ChargePaymentResult, chargeErr error) {
 	now := workflow.Now(ctx)
 	eventType := billing.TypeCharged
 	failureReason := ""
@@ -60,7 +53,7 @@ func (s *Subscription) recordBillingEvent(ctx workflow.Context, ref string, dunn
 	}
 	ev := billing.Event{
 		ID:             ref,
-		SubscriptionID: s.ID,
+		SubscriptionID: s.SubscriptionID,
 		UserID:         s.UserID,
 		PlanCode:       s.PlanCode,
 		Type:           eventType,
@@ -70,32 +63,29 @@ func (s *Subscription) recordBillingEvent(ctx workflow.Context, ref string, dunn
 		PeriodEnd:      s.Period.End,
 		RenewalCount:   s.RenewalCount,
 		DunningAttempt: dunningAttempt,
-		TransactionID:  res.TransactionID,
+		TransactionID:  chargeRes.TransactionID,
 		FailureReason:  failureReason,
 		OccurredAt:     now,
 		Reference:      ref,
 	}
-	opts := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+	billingOpts := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Second,
 		RetryPolicy:         activity.BillingEventRetry,
 	})
-	_ = workflow.ExecuteActivity(opts, "RecordBillingEvent", ev).Get(ctx, nil)
-}
+	_ = workflow.ExecuteActivity(billingOpts, "RecordBillingEvent", ev).Get(ctx, nil)
 
-// applyChargeOutcome updates the entity's O(1) summary fields and fires the
-// payment hook.
-func (s *Subscription) applyChargeOutcome(ctx workflow.Context, res activity.ChargePaymentResult, chargeErr error, dunningAttempt int) {
-	now := workflow.Now(ctx)
 	if chargeErr == nil {
 		s.LastChargedAt = now
 		s.LastChargeAmountCents = s.Plan.PriceCents
 		s.TotalChargedCents += s.Plan.PriceCents
 		s.SuccessfulChargeCount++
-		_ = s.FirePaymentHook(ctx, HookPaymentOK, dunningAttempt, res.TransactionID, "")
-		return
+		_ = s.FirePaymentHook(ctx, HookPaymentOK, dunningAttempt, chargeRes.TransactionID, "")
+	} else {
+		s.LastFailureAt = now
+		s.LastFailureReason = chargeErr.Error()
+		s.FailedChargeCount++
+		_ = s.FirePaymentHook(ctx, HookPaymentFailed, dunningAttempt, "", chargeErr.Error())
 	}
-	s.LastFailureAt = now
-	s.LastFailureReason = chargeErr.Error()
-	s.FailedChargeCount++
-	_ = s.FirePaymentHook(ctx, HookPaymentFailed, dunningAttempt, "", chargeErr.Error())
+
+	return chargeErr
 }

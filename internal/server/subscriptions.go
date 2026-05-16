@@ -62,6 +62,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req *subfl
 
 	wfInput := subscription.SubscriptionInput{
 		SubscriptionID: subID,
+		IntervalID:     uuid.NewString(),
 		UserID:         req.UserId,
 		PlanID:         p.ID,
 		Plan:           plan.SnapshotOf(p),
@@ -75,21 +76,19 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req *subfl
 		initialPhase = "trialing"
 	}
 
-	startSA := map[string]any{
-		subflowtemporal.AttrUserId:    req.UserId,
-		subflowtemporal.AttrPlanCode:  p.Code,
-		subflowtemporal.AttrPhase:     initialPhase,
-		subflowtemporal.AttrPeriodEnd: periodEnd,
-	}
+	var trialEndsAt *time.Time
 	if p.TrialDuration > 0 {
-		startSA[subflowtemporal.AttrTrialEnd] = periodEnd
+		trialEndsAt = &periodEnd
 	}
+	startVisibility := subflowtemporal.NewSubscriptionStartSearchAttributes(
+		req.UserId, p.Code, initialPhase, periodEnd, trialEndsAt,
+	)
 
 	startOp := s.Temporal.NewWithStartWorkflowOperation(client.StartWorkflowOptions{
 		ID:                       "subscription:" + subID,
 		TaskQueue:                s.TaskQueue,
 		WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-		SearchAttributes:         startSA,
+		TypedSearchAttributes:    startVisibility,
 	}, workflow.SubscriptionWorkflow, wfInput)
 
 	// For non-trial plans we wait for Completed (activation must succeed

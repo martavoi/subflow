@@ -14,7 +14,9 @@ func (s *Subscription) AwaitPeriodEndOrCancellation(ctx workflow.Context) bool {
 	if s.CancelRequested {
 		s.transitionTo(ctx, PhaseCanceled)
 		_ = s.FireLifecycleHook(ctx, HookCanceled)
-		s.sleepRemainder(ctx)
+		if remaining := s.Period.End.Sub(workflow.Now(ctx)); remaining > 0 {
+			_ = workflow.Sleep(ctx, remaining)
+		}
 		return true
 	}
 
@@ -39,16 +41,10 @@ func (s *Subscription) AwaitPeriodEndOrCancellation(ctx workflow.Context) bool {
 	// remainder, then return true.
 	s.transitionTo(ctx, PhaseCanceled)
 	_ = s.FireLifecycleHook(ctx, HookCanceled)
-	s.sleepRemainder(ctx)
-	return true
-}
-
-// sleepRemainder durably sleeps until s.Period.End. No-op if already past.
-func (s *Subscription) sleepRemainder(ctx workflow.Context) {
-	remaining := s.Period.End.Sub(workflow.Now(ctx))
-	if remaining > 0 {
+	if remaining := s.Period.End.Sub(workflow.Now(ctx)); remaining > 0 {
 		_ = workflow.Sleep(ctx, remaining)
 	}
+	return true
 }
 
 // Deactivate runs the terminal deactivation hook and transitions to deactivated.

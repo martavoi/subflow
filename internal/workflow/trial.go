@@ -24,9 +24,9 @@ const (
 //     end-of-period semantics apply only to paid periods)
 func (s *Subscription) Trial(ctx workflow.Context) (trialOutcome, error) {
 	s.transitionTo(ctx, PhaseTrialing)
-	_ = workflow.UpsertSearchAttributes(ctx, map[string]any{
-		subflowtemporal.AttrTrialEnd: s.Period.End,
-	})
+	_ = workflow.UpsertTypedSearchAttributes(ctx,
+		subflowtemporal.KeyTrialEnd.ValueSet(s.Period.End),
+	)
 	_ = s.FireLifecycleHook(ctx, HookTrialStarted)
 
 	now := workflow.Now(ctx)

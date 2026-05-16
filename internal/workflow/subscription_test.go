@@ -37,6 +37,7 @@ func sampleInput(mods ...func(*plan.Snapshot)) subscription.SubscriptionInput {
 	}
 	return subscription.SubscriptionInput{
 		SubscriptionID: "sub-1",
+		IntervalID:     "interval-1",
 		UserID:         "user-1",
 		PlanID:         "plan-1",
 		Plan:           p,

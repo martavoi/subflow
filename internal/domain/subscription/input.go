@@ -8,8 +8,14 @@ import (
 
 // SubscriptionInput is the workflow input. Carried across Continue-As-New
 // so the next run can resume cleanly.
+//
+// IntervalID identifies the current billing interval (trial, first paid period,
+// each renewal). Rotated on every CAN; stable within a run. Combined with
+// SubscriptionID it produces durable idempotency keys for charges and hooks
+// without coupling to Temporal exec/run IDs.
 type SubscriptionInput struct {
 	SubscriptionID  string
+	IntervalID      string
 	UserID          string
 	PlanID          string
 	Plan            plan.Snapshot

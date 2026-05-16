@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/martavoi/subflow/internal/activity"
@@ -70,12 +71,12 @@ func (s *Subscription) FireLifecycleHook(ctx workflow.Context, h Hook) error {
 	if s.Plan.IntegrationEndpoint == "" || !h.isEnabled(s.Plan.EnabledHooks) {
 		return nil
 	}
-	ref := s.idempotencyKey(ctx, "hook:"+h.Name)
+	ref := s.idempotencyKey("hook:" + h.Name)
 	in := activity.LifecycleHookInput{
 		Reference:           ref,
 		IntegrationEndpoint: s.Plan.IntegrationEndpoint,
 		HookName:            h.Name,
-		SubscriptionID:      s.ID,
+		SubscriptionID:      s.SubscriptionID,
 		UserID:              s.UserID,
 		PlanCode:            s.PlanCode,
 		Phase:               string(s.Phase),
@@ -98,12 +99,12 @@ func (s *Subscription) FirePaymentHook(ctx workflow.Context, h Hook, dunningAtte
 	if s.Plan.IntegrationEndpoint == "" || !h.isEnabled(s.Plan.EnabledHooks) {
 		return nil
 	}
-	ref := s.idempotencyKey(ctx, "hook:"+h.Name)
+	ref := s.idempotencyKey(fmt.Sprintf("hook:%s:%d", h.Name, dunningAttempt))
 	in := activity.PaymentHookInput{
 		Reference:           ref,
 		IntegrationEndpoint: s.Plan.IntegrationEndpoint,
 		HookName:            h.Name,
-		SubscriptionID:      s.ID,
+		SubscriptionID:      s.SubscriptionID,
 		UserID:              s.UserID,
 		PlanCode:            s.PlanCode,
 		RenewalCount:        s.RenewalCount,
