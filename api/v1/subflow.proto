@@ -40,6 +40,7 @@ message Plan {
   string dunning_retry_backoff = 11;
   string integration_endpoint = 12;
   repeated string enabled_hooks = 13;
+  string renewal_upcoming_before = 14;
 }
 
 message CreatePlanRequest {
@@ -55,6 +56,7 @@ message CreatePlanRequest {
   string dunning_retry_backoff = 10;
   string integration_endpoint = 11;
   repeated string enabled_hooks = 12;
+  string renewal_upcoming_before = 13;
 }
 
 message GetPlanRequest    { string id = 1; }

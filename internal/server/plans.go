@@ -80,6 +80,10 @@ func buildPlanFromRequest(req *subflowv1.CreatePlanRequest) (plan.Plan, error) {
 	if notice > 0 && trial > 0 && notice >= trial {
 		return plan.Plan{}, fmt.Errorf("trial_end_notice_before (%s) must be less than trial_duration (%s)", notice, trial)
 	}
+	renewalNotice, err := parseOptionalDuration(req.RenewalUpcomingBefore)
+	if err != nil {
+		return plan.Plan{}, fmt.Errorf("renewal_upcoming_before: %w", err)
+	}
 	backoff, err := parseOptionalDuration(req.DunningRetryBackoff)
 	if err != nil {
 		return plan.Plan{}, fmt.Errorf("dunning_retry_backoff: %w", err)
@@ -122,9 +126,10 @@ func buildPlanFromRequest(req *subflowv1.CreatePlanRequest) (plan.Plan, error) {
 		PriceCents:           req.PriceCents,
 		Currency:             currency,
 		PerUserLimit:         int(req.PerUserLimit),
-		TrialDuration:        trial,
-		TrialEndNoticeBefore: notice,
-		DunningMaxAttempts:   dunningMaxAttempts,
+		TrialDuration:         trial,
+		TrialEndNoticeBefore:  notice,
+		RenewalUpcomingBefore: renewalNotice,
+		DunningMaxAttempts:    dunningMaxAttempts,
 		DunningRetryBackoff:  backoff,
 		IntegrationEndpoint:  req.IntegrationEndpoint,
 		EnabledHooks:         hooks,
@@ -152,9 +157,10 @@ func planToProto(p plan.Plan) *subflowv1.Plan {
 		PriceCents:           p.PriceCents,
 		Currency:             p.Currency,
 		PerUserLimit:         int32(p.PerUserLimit),
-		TrialDuration:        durationOrEmpty(p.TrialDuration),
-		TrialEndNoticeBefore: durationOrEmpty(p.TrialEndNoticeBefore),
-		DunningMaxAttempts:   int32(p.DunningMaxAttempts),
+		TrialDuration:         durationOrEmpty(p.TrialDuration),
+		TrialEndNoticeBefore:  durationOrEmpty(p.TrialEndNoticeBefore),
+		RenewalUpcomingBefore: durationOrEmpty(p.RenewalUpcomingBefore),
+		DunningMaxAttempts:    int32(p.DunningMaxAttempts),
 		DunningRetryBackoff:  durationOrEmpty(p.DunningRetryBackoff),
 		IntegrationEndpoint:  p.IntegrationEndpoint,
 		EnabledHooks:         hookStrings,

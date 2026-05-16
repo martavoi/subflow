@@ -13,7 +13,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 )
 
-// sampleInput builds a SubscriptionInput with all 10 hooks enabled so test
+// sampleInput builds a SubscriptionInput with all 11 hooks enabled so test
 // observers can count fire counts. Period anchored at time.Now to play nicely
 // with the test harness mock clock.
 func sampleInput(mods ...func(*plan.Snapshot)) SubscriptionInput {
@@ -26,6 +26,7 @@ func sampleInput(mods ...func(*plan.Snapshot)) SubscriptionInput {
 		IntegrationEndpoint: "mock:50052",
 		EnabledHooks: []hook.Type{
 			hook.TrialStarted, hook.TrialWillEnd,
+			hook.RenewalUpcoming,
 			hook.Activated, hook.Renewed,
 			hook.PastDue, hook.Recovered,
 			hook.Canceled, hook.Deactivated,
@@ -240,5 +241,127 @@ func TestSubscription_RenewalDunningExhausted(t *testing.T) {
 	}
 	if rec.lifecycle["subscription.deactivated"] != 1 {
 		t.Fatalf("expected deactivated, got %d", rec.lifecycle["subscription.deactivated"])
+	}
+}
+
+// TestRenewalUpcoming_FiresOnRenewalPeriod verifies that the renewal_upcoming
+// hook fires exactly once per renewal period when RenewalUpcomingBefore > 0.
+func TestRenewalUpcoming_FiresOnRenewalPeriod(t *testing.T) {
+	s := testsuite.WorkflowTestSuite{}
+	env := s.NewTestWorkflowEnvironment()
+	rec := newHookRecord()
+	registerMocks(env, rec, nil)
+
+	// Renewal period: RenewalCount=1 so Run() goes directly to Renew → AwaitEnd.
+	// Cadence=30s, RenewalUpcomingBefore=5s → notice fires at PeriodEnd-5s.
+	input := sampleInput(func(p *plan.Snapshot) {
+		p.Cadence = 30 * time.Second
+		p.RenewalUpcomingBefore = 5 * time.Second
+	})
+	input.RenewalCount = 1
+	input.PeriodEnd = input.PeriodStart.Add(input.Plan.Cadence)
+
+	env.ExecuteWorkflow(SubscriptionWorkflow, input)
+
+	if !env.IsWorkflowCompleted() {
+		t.Fatalf("workflow not completed")
+	}
+	if rec.lifecycle["subscription.renewal_upcoming"] != 1 {
+		t.Fatalf("expected 1 renewal_upcoming hook, got %d", rec.lifecycle["subscription.renewal_upcoming"])
+	}
+}
+
+// TestRenewalUpcoming_FiresOnFirstPaidPeriod verifies that the renewal_upcoming
+// hook fires during the first paid period (no-trial plan, RenewalCount=0 after
+// activation charges the first period).
+func TestRenewalUpcoming_FiresOnFirstPaidPeriod(t *testing.T) {
+	s := testsuite.WorkflowTestSuite{}
+	env := s.NewTestWorkflowEnvironment()
+	rec := newHookRecord()
+	registerMocks(env, rec, nil)
+
+	// No-trial plan: RenewalCount=0, Activate update triggers first charge,
+	// then AwaitEnd runs with RenewalUpcomingBefore set.
+	input := sampleInput(func(p *plan.Snapshot) {
+		p.Cadence = 30 * time.Second
+		p.RenewalUpcomingBefore = 5 * time.Second
+	})
+	input.PeriodEnd = input.PeriodStart.Add(input.Plan.Cadence)
+
+	// Send Activate update at t=0 so activation proceeds immediately.
+	env.RegisterDelayedCallback(func() {
+		env.UpdateWorkflowNoRejection(UpdateActivate, "act-1", t)
+	}, 0)
+
+	env.ExecuteWorkflow(SubscriptionWorkflow, input)
+
+	if !env.IsWorkflowCompleted() {
+		t.Fatalf("workflow not completed")
+	}
+	if rec.lifecycle["subscription.renewal_upcoming"] != 1 {
+		t.Fatalf("expected 1 renewal_upcoming hook on first paid period, got %d", rec.lifecycle["subscription.renewal_upcoming"])
+	}
+}
+
+// TestRenewalUpcoming_DoesNotFireWhenZero verifies that the hook does NOT fire
+// when RenewalUpcomingBefore == 0.
+func TestRenewalUpcoming_DoesNotFireWhenZero(t *testing.T) {
+	s := testsuite.WorkflowTestSuite{}
+	env := s.NewTestWorkflowEnvironment()
+	rec := newHookRecord()
+	registerMocks(env, rec, nil)
+
+	input := sampleInput(func(p *plan.Snapshot) {
+		p.Cadence = 30 * time.Second
+		// RenewalUpcomingBefore is zero (default) — no hook should fire.
+	})
+	input.RenewalCount = 1
+	input.PeriodEnd = input.PeriodStart.Add(input.Plan.Cadence)
+
+	env.ExecuteWorkflow(SubscriptionWorkflow, input)
+
+	if !env.IsWorkflowCompleted() {
+		t.Fatalf("workflow not completed")
+	}
+	if rec.lifecycle["subscription.renewal_upcoming"] != 0 {
+		t.Fatalf("expected 0 renewal_upcoming hooks when RenewalUpcomingBefore==0, got %d", rec.lifecycle["subscription.renewal_upcoming"])
+	}
+}
+
+// TestRenewalUpcoming_DoesNotFireWhenCanceledBeforeNotice verifies that the
+// hook does NOT fire if cancel arrives before the notice timestamp.
+func TestRenewalUpcoming_DoesNotFireWhenCanceledBeforeNotice(t *testing.T) {
+	s := testsuite.WorkflowTestSuite{}
+	env := s.NewTestWorkflowEnvironment()
+	rec := newHookRecord()
+	registerMocks(env, rec, nil)
+
+	// Cadence=30s, notice at PeriodEnd-5s = t+25s.
+	// Cancel arrives at t+10s — before the notice at t+25s.
+	input := sampleInput(func(p *plan.Snapshot) {
+		p.Cadence = 30 * time.Second
+		p.RenewalUpcomingBefore = 5 * time.Second
+	})
+	input.RenewalCount = 1
+	input.PeriodEnd = input.PeriodStart.Add(input.Plan.Cadence)
+
+	// Signal cancel at 10s into the period — well before the 25s notice.
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(SignalCancelSubscription, struct{}{})
+	}, 10*time.Second)
+
+	env.ExecuteWorkflow(SubscriptionWorkflow, input)
+
+	if !env.IsWorkflowCompleted() {
+		t.Fatalf("workflow not completed")
+	}
+	if rec.lifecycle["subscription.renewal_upcoming"] != 0 {
+		t.Fatalf("renewal_upcoming should NOT fire when cancel precedes notice timestamp, got %d", rec.lifecycle["subscription.renewal_upcoming"])
+	}
+	if rec.lifecycle["subscription.canceled"] != 1 {
+		t.Fatalf("expected canceled hook, got %d", rec.lifecycle["subscription.canceled"])
+	}
+	if rec.lifecycle["subscription.deactivated"] != 1 {
+		t.Fatalf("expected deactivated hook, got %d", rec.lifecycle["subscription.deactivated"])
 	}
 }
