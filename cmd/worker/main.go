@@ -59,12 +59,12 @@ func main() {
 	intClient := integration.NewClient()
 	defer intClient.Close()
 
-	paymentActs := &activity.PaymentActivities{
+	paymentActs := &activity.PaymentGateway{
 		TransientFailureRate: cfg.PaymentTransientRate,
 		TerminalFailureRate:  cfg.PaymentTerminalRate,
 	}
-	billingActs := &activity.BillingActivities{Events: billingStore}
-	hookActs := &activity.HookActivities{Client: intClient}
+	billingActs := &activity.BillingStore{Events: billingStore}
+	hookActs := &activity.HookDispatcher{Client: intClient}
 
 	w := worker.New(tc, cfg.TaskQueue, worker.Options{})
 	w.RegisterWorkflow(wfpkg.SubscriptionWorkflow)

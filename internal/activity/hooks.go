@@ -46,13 +46,13 @@ type PaymentHookInput struct {
 	Context             map[string]string
 }
 
-// HookActivities groups the 10 hook dispatch activities, all of which share
+// HookDispatcher groups the 10 hook dispatch activities, all of which share
 // the same integration client.
-type HookActivities struct {
+type HookDispatcher struct {
 	Client *integration.Client
 }
 
-func (a *HookActivities) dispatchLifecycle(ctx context.Context, in LifecycleHookInput) error {
+func (a *HookDispatcher) dispatchLifecycle(ctx context.Context, in LifecycleHookInput) error {
 	ev := &subflowv1.LifecycleEvent{
 		Reference:      in.Reference,
 		SubscriptionId: in.SubscriptionID,
@@ -68,7 +68,7 @@ func (a *HookActivities) dispatchLifecycle(ctx context.Context, in LifecycleHook
 	return mapHookError(a.Client.DispatchLifecycle(ctx, in.IntegrationEndpoint, in.HookName, ev))
 }
 
-func (a *HookActivities) dispatchPayment(ctx context.Context, in PaymentHookInput) error {
+func (a *HookDispatcher) dispatchPayment(ctx context.Context, in PaymentHookInput) error {
 	ev := &subflowv1.PaymentEvent{
 		Reference:      in.Reference,
 		SubscriptionId: in.SubscriptionID,
@@ -105,42 +105,42 @@ func mapHookError(err error) error {
 // 10 registered methods — each is a thin wrapper. We keep them as discrete
 // registered names so the Web UI shows the hook name on every activity execution.
 
-func (a *HookActivities) OnTrialStarted(ctx context.Context, in LifecycleHookInput) error {
+func (a *HookDispatcher) OnTrialStarted(ctx context.Context, in LifecycleHookInput) error {
 	return a.dispatchLifecycle(ctx, in)
 }
 
-func (a *HookActivities) OnTrialWillEnd(ctx context.Context, in LifecycleHookInput) error {
+func (a *HookDispatcher) OnTrialWillEnd(ctx context.Context, in LifecycleHookInput) error {
 	return a.dispatchLifecycle(ctx, in)
 }
 
-func (a *HookActivities) OnActivated(ctx context.Context, in LifecycleHookInput) error {
+func (a *HookDispatcher) OnActivated(ctx context.Context, in LifecycleHookInput) error {
 	return a.dispatchLifecycle(ctx, in)
 }
 
-func (a *HookActivities) OnRenewed(ctx context.Context, in LifecycleHookInput) error {
+func (a *HookDispatcher) OnRenewed(ctx context.Context, in LifecycleHookInput) error {
 	return a.dispatchLifecycle(ctx, in)
 }
 
-func (a *HookActivities) OnPastDue(ctx context.Context, in LifecycleHookInput) error {
+func (a *HookDispatcher) OnPastDue(ctx context.Context, in LifecycleHookInput) error {
 	return a.dispatchLifecycle(ctx, in)
 }
 
-func (a *HookActivities) OnRecovered(ctx context.Context, in LifecycleHookInput) error {
+func (a *HookDispatcher) OnRecovered(ctx context.Context, in LifecycleHookInput) error {
 	return a.dispatchLifecycle(ctx, in)
 }
 
-func (a *HookActivities) OnCanceled(ctx context.Context, in LifecycleHookInput) error {
+func (a *HookDispatcher) OnCanceled(ctx context.Context, in LifecycleHookInput) error {
 	return a.dispatchLifecycle(ctx, in)
 }
 
-func (a *HookActivities) OnDeactivated(ctx context.Context, in LifecycleHookInput) error {
+func (a *HookDispatcher) OnDeactivated(ctx context.Context, in LifecycleHookInput) error {
 	return a.dispatchLifecycle(ctx, in)
 }
 
-func (a *HookActivities) OnPaymentSucceeded(ctx context.Context, in PaymentHookInput) error {
+func (a *HookDispatcher) OnPaymentSucceeded(ctx context.Context, in PaymentHookInput) error {
 	return a.dispatchPayment(ctx, in)
 }
 
-func (a *HookActivities) OnPaymentFailed(ctx context.Context, in PaymentHookInput) error {
+func (a *HookDispatcher) OnPaymentFailed(ctx context.Context, in PaymentHookInput) error {
 	return a.dispatchPayment(ctx, in)
 }
