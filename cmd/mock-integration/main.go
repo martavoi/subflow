@@ -29,68 +29,38 @@ type server struct {
 	seenRef map[string]bool
 }
 
-func (s *server) maybeFail(hook, reference string) error {
+func (s *server) maybeFail(hookType, id string) error {
 	if s.latency > 0 {
 		time.Sleep(s.latency)
 	}
 	s.mu.Lock()
-	if s.seenRef[reference] {
+	if s.seenRef[id] {
 		s.mu.Unlock()
-		s.logger.Info("idempotent replay", "hook", hook, "reference", reference)
+		s.logger.Info("idempotent replay", "hook", hookType, "id", id)
 		return nil
 	}
 	s.mu.Unlock()
 
 	r := rand.Float64()
 	if r < s.terminalFailureRate {
-		s.logger.Warn("injected terminal", "hook", hook, "reference", reference)
+		s.logger.Warn("injected terminal", "hook", hookType, "id", id)
 		return status.Error(codes.FailedPrecondition, "injected terminal failure")
 	}
 	if r < s.terminalFailureRate+s.failureRate {
-		s.logger.Warn("injected transient", "hook", hook, "reference", reference)
+		s.logger.Warn("injected transient", "hook", hookType, "id", id)
 		return status.Error(codes.Unavailable, "injected transient failure")
 	}
 
 	s.mu.Lock()
-	s.seenRef[reference] = true
+	s.seenRef[id] = true
 	s.mu.Unlock()
-	s.logger.Info("hook handled", "hook", hook, "reference", reference)
+	s.logger.Info("hook handled", "hook", hookType, "id", id)
 	return nil
 }
 
-func (s *server) OnTrialStarted(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
-	return ack(s.maybeFail("OnTrialStarted", ev.Reference))
-}
-func (s *server) OnTrialWillEnd(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
-	return ack(s.maybeFail("OnTrialWillEnd", ev.Reference))
-}
-func (s *server) OnActivated(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
-	return ack(s.maybeFail("OnActivated", ev.Reference))
-}
-func (s *server) OnRenewed(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
-	return ack(s.maybeFail("OnRenewed", ev.Reference))
-}
-func (s *server) OnPastDue(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
-	return ack(s.maybeFail("OnPastDue", ev.Reference))
-}
-func (s *server) OnRecovered(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
-	return ack(s.maybeFail("OnRecovered", ev.Reference))
-}
-func (s *server) OnCanceled(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
-	return ack(s.maybeFail("OnCanceled", ev.Reference))
-}
-func (s *server) OnDeactivated(_ context.Context, ev *subflowv1.LifecycleEvent) (*subflowv1.HookAck, error) {
-	return ack(s.maybeFail("OnDeactivated", ev.Reference))
-}
-func (s *server) OnPaymentSucceeded(_ context.Context, ev *subflowv1.PaymentEvent) (*subflowv1.HookAck, error) {
-	return ack(s.maybeFail("OnPaymentSucceeded", ev.Reference))
-}
-func (s *server) OnPaymentFailed(_ context.Context, ev *subflowv1.PaymentEvent) (*subflowv1.HookAck, error) {
-	return ack(s.maybeFail("OnPaymentFailed", ev.Reference))
-}
-
-func ack(err error) (*subflowv1.HookAck, error) {
-	if err != nil {
+func (s *server) Dispatch(_ context.Context, ev *subflowv1.Event) (*subflowv1.HookAck, error) {
+	s.logger.Info("dispatch", "type", ev.Type, "subscription_id", ev.SubscriptionId)
+	if err := s.maybeFail(ev.Type, ev.Id); err != nil {
 		return nil, err
 	}
 	return &subflowv1.HookAck{}, nil

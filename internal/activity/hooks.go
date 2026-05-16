@@ -5,6 +5,7 @@ import (
 	"time"
 
 	subflowv1 "github.com/martavoi/subflow/api/v1"
+	"github.com/martavoi/subflow/internal/hook"
 	"github.com/martavoi/subflow/internal/integration"
 	"go.temporal.io/sdk/temporal"
 	"google.golang.org/grpc/codes"
@@ -12,78 +13,82 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// LifecycleHookInput is the activity input for the 8 subscription-level hooks.
-type LifecycleHookInput struct {
-	Reference           string
-	IntegrationEndpoint string
-	HookName            string
-	SubscriptionID      string
-	UserID              string
-	PlanCode            string
-	Phase               string
-	RenewalCount        int
-	PeriodStart         time.Time
-	PeriodEnd           time.Time
-	EventTime           time.Time
-	Context             map[string]string
+// DispatchHook is the single activity input for all hook dispatches.
+type DispatchHook struct {
+	Endpoint       string
+	EventID        string
+	Type           hook.Type
+	SubscriptionID string
+	UserID         string
+	PlanCode       string
+	RenewalCount   int
+	EventTime      time.Time
+	Context        map[string]string
+
+	// Exactly one of these is populated based on hook category.
+	Lifecycle *LifecycleData
+	Payment   *PaymentData
 }
 
-// PaymentHookInput is the activity input for the 2 payment-level hooks.
-type PaymentHookInput struct {
-	Reference           string
-	IntegrationEndpoint string
-	HookName            string
-	SubscriptionID      string
-	UserID              string
-	PlanCode            string
-	RenewalCount        int
-	DunningAttempt      int
-	AmountCents         int64
-	Currency            string
-	TransactionID       string
-	FailureReason       string
-	EventTime           time.Time
-	Context             map[string]string
+// LifecycleData carries payload fields for lifecycle hooks (8 types).
+type LifecycleData struct {
+	Phase       string
+	PeriodStart time.Time
+	PeriodEnd   time.Time
 }
 
-// HookDispatcher groups the 10 hook dispatch activities, all of which share
-// the same integration client.
+// PaymentData carries payload fields for payment hooks (2 types).
+type PaymentData struct {
+	DunningAttempt int
+	AmountCents    int64
+	Currency       string
+	TransactionID  string
+	FailureReason  string
+}
+
+// HookDispatcher groups the hook dispatch activity. A single Dispatch method
+// replaces the 10 per-hook On* methods.
 type HookDispatcher struct {
 	Client *integration.Client
 }
 
-func (a *HookDispatcher) dispatchLifecycle(ctx context.Context, in LifecycleHookInput) error {
-	ev := &subflowv1.LifecycleEvent{
-		Reference:      in.Reference,
+// Dispatch is the single registered activity for all hook types. It builds a
+// proto Event with the appropriate oneof payload and calls the integration's
+// Dispatch rpc.
+func (h *HookDispatcher) Dispatch(ctx context.Context, in DispatchHook) error {
+	ev := &subflowv1.Event{
+		Id:             in.EventID,
+		Type:           string(in.Type),
+		CreatedAt:      timestamppb.New(in.EventTime),
+		Context:        in.Context,
 		SubscriptionId: in.SubscriptionID,
 		UserId:         in.UserID,
 		PlanCode:       in.PlanCode,
-		Phase:          in.Phase,
 		RenewalCount:   int32(in.RenewalCount),
-		PeriodStart:    timestamppb.New(in.PeriodStart),
-		PeriodEnd:      timestamppb.New(in.PeriodEnd),
-		EventTime:      timestamppb.New(in.EventTime),
-		Context:        in.Context,
 	}
-	return mapHookError(a.Client.DispatchLifecycle(ctx, in.IntegrationEndpoint, in.HookName, ev))
-}
 
-func (a *HookDispatcher) dispatchPayment(ctx context.Context, in PaymentHookInput) error {
-	ev := &subflowv1.PaymentEvent{
-		Reference:      in.Reference,
-		SubscriptionId: in.SubscriptionID,
-		UserId:         in.UserID,
-		PlanCode:       in.PlanCode,
-		RenewalCount:   int32(in.RenewalCount),
-		DunningAttempt: int32(in.DunningAttempt),
-		AmountCents:    in.AmountCents,
-		Currency:       in.Currency,
-		TransactionId:  in.TransactionID,
-		FailureReason:  in.FailureReason,
-		EventTime:      timestamppb.New(in.EventTime),
-		Context:        in.Context,
+	switch {
+	case in.Lifecycle != nil:
+		ev.Data = &subflowv1.Event_Lifecycle{
+			Lifecycle: &subflowv1.LifecycleData{
+				Phase:       in.Lifecycle.Phase,
+				PeriodStart: timestamppb.New(in.Lifecycle.PeriodStart),
+				PeriodEnd:   timestamppb.New(in.Lifecycle.PeriodEnd),
+			},
+		}
+	case in.Payment != nil:
+		ev.Data = &subflowv1.Event_Payment{
+			Payment: &subflowv1.PaymentData{
+				DunningAttempt: int32(in.Payment.DunningAttempt),
+				AmountCents:    in.Payment.AmountCents,
+				Currency:       in.Payment.Currency,
+				TransactionId:  in.Payment.TransactionID,
+				FailureReason:  in.Payment.FailureReason,
+			},
+		}
 	}
-	return mapHookError(a.Client.DispatchPayment(ctx, in.IntegrationEndpoint, in.HookName, ev))
+
+	return mapHookError(h.Client.Dispatch(ctx, in.Endpoint, ev))
 }
 
 // mapHookError converts gRPC errors to Temporal application errors. Terminal
@@ -100,47 +105,4 @@ func mapHookError(err error) error {
 		}
 	}
 	return temporal.NewApplicationError(err.Error(), "HookTransientError")
-}
-
-// 10 registered methods — each is a thin wrapper. We keep them as discrete
-// registered names so the Web UI shows the hook name on every activity execution.
-
-func (a *HookDispatcher) OnTrialStarted(ctx context.Context, in LifecycleHookInput) error {
-	return a.dispatchLifecycle(ctx, in)
-}
-
-func (a *HookDispatcher) OnTrialWillEnd(ctx context.Context, in LifecycleHookInput) error {
-	return a.dispatchLifecycle(ctx, in)
-}
-
-func (a *HookDispatcher) OnActivated(ctx context.Context, in LifecycleHookInput) error {
-	return a.dispatchLifecycle(ctx, in)
-}
-
-func (a *HookDispatcher) OnRenewed(ctx context.Context, in LifecycleHookInput) error {
-	return a.dispatchLifecycle(ctx, in)
-}
-
-func (a *HookDispatcher) OnPastDue(ctx context.Context, in LifecycleHookInput) error {
-	return a.dispatchLifecycle(ctx, in)
-}
-
-func (a *HookDispatcher) OnRecovered(ctx context.Context, in LifecycleHookInput) error {
-	return a.dispatchLifecycle(ctx, in)
-}
-
-func (a *HookDispatcher) OnCanceled(ctx context.Context, in LifecycleHookInput) error {
-	return a.dispatchLifecycle(ctx, in)
-}
-
-func (a *HookDispatcher) OnDeactivated(ctx context.Context, in LifecycleHookInput) error {
-	return a.dispatchLifecycle(ctx, in)
-}
-
-func (a *HookDispatcher) OnPaymentSucceeded(ctx context.Context, in PaymentHookInput) error {
-	return a.dispatchPayment(ctx, in)
-}
-
-func (a *HookDispatcher) OnPaymentFailed(ctx context.Context, in PaymentHookInput) error {
-	return a.dispatchPayment(ctx, in)
 }

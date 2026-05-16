@@ -73,17 +73,8 @@ func main() {
 	w.RegisterActivityWithOptions(paymentActs.ChargePayment, tactivity.RegisterOptions{Name: "ChargePayment"})
 	w.RegisterActivityWithOptions(billingActs.RecordBillingEvent, tactivity.RegisterOptions{Name: "RecordBillingEvent"})
 
-	// 10 hook activities
-	w.RegisterActivityWithOptions(hookActs.OnTrialStarted, tactivity.RegisterOptions{Name: "OnTrialStarted"})
-	w.RegisterActivityWithOptions(hookActs.OnTrialWillEnd, tactivity.RegisterOptions{Name: "OnTrialWillEnd"})
-	w.RegisterActivityWithOptions(hookActs.OnActivated, tactivity.RegisterOptions{Name: "OnActivated"})
-	w.RegisterActivityWithOptions(hookActs.OnRenewed, tactivity.RegisterOptions{Name: "OnRenewed"})
-	w.RegisterActivityWithOptions(hookActs.OnPastDue, tactivity.RegisterOptions{Name: "OnPastDue"})
-	w.RegisterActivityWithOptions(hookActs.OnRecovered, tactivity.RegisterOptions{Name: "OnRecovered"})
-	w.RegisterActivityWithOptions(hookActs.OnCanceled, tactivity.RegisterOptions{Name: "OnCanceled"})
-	w.RegisterActivityWithOptions(hookActs.OnDeactivated, tactivity.RegisterOptions{Name: "OnDeactivated"})
-	w.RegisterActivityWithOptions(hookActs.OnPaymentSucceeded, tactivity.RegisterOptions{Name: "OnPaymentSucceeded"})
-	w.RegisterActivityWithOptions(hookActs.OnPaymentFailed, tactivity.RegisterOptions{Name: "OnPaymentFailed"})
+	// Single hook dispatch activity
+	w.RegisterActivityWithOptions(hookActs.Dispatch, tactivity.RegisterOptions{Name: "DispatchHook"})
 
 	logger.Info("subflow-worker starting", "task_queue", cfg.TaskQueue)
 	if err := w.Run(worker.InterruptCh()); err != nil {

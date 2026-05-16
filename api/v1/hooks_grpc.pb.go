@@ -19,32 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SubscriptionHooks_OnTrialStarted_FullMethodName     = "/subflow.hooks.v1.SubscriptionHooks/OnTrialStarted"
-	SubscriptionHooks_OnTrialWillEnd_FullMethodName     = "/subflow.hooks.v1.SubscriptionHooks/OnTrialWillEnd"
-	SubscriptionHooks_OnActivated_FullMethodName        = "/subflow.hooks.v1.SubscriptionHooks/OnActivated"
-	SubscriptionHooks_OnRenewed_FullMethodName          = "/subflow.hooks.v1.SubscriptionHooks/OnRenewed"
-	SubscriptionHooks_OnPastDue_FullMethodName          = "/subflow.hooks.v1.SubscriptionHooks/OnPastDue"
-	SubscriptionHooks_OnRecovered_FullMethodName        = "/subflow.hooks.v1.SubscriptionHooks/OnRecovered"
-	SubscriptionHooks_OnCanceled_FullMethodName         = "/subflow.hooks.v1.SubscriptionHooks/OnCanceled"
-	SubscriptionHooks_OnDeactivated_FullMethodName      = "/subflow.hooks.v1.SubscriptionHooks/OnDeactivated"
-	SubscriptionHooks_OnPaymentSucceeded_FullMethodName = "/subflow.hooks.v1.SubscriptionHooks/OnPaymentSucceeded"
-	SubscriptionHooks_OnPaymentFailed_FullMethodName    = "/subflow.hooks.v1.SubscriptionHooks/OnPaymentFailed"
+	SubscriptionHooks_Dispatch_FullMethodName = "/subflow.hooks.v1.SubscriptionHooks/Dispatch"
 )
 
 // SubscriptionHooksClient is the client API for SubscriptionHooks service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SubscriptionHooksClient interface {
-	OnTrialStarted(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error)
-	OnTrialWillEnd(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error)
-	OnActivated(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error)
-	OnRenewed(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error)
-	OnPastDue(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error)
-	OnRecovered(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error)
-	OnCanceled(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error)
-	OnDeactivated(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error)
-	OnPaymentSucceeded(ctx context.Context, in *PaymentEvent, opts ...grpc.CallOption) (*HookAck, error)
-	OnPaymentFailed(ctx context.Context, in *PaymentEvent, opts ...grpc.CallOption) (*HookAck, error)
+	Dispatch(ctx context.Context, in *Event, opts ...grpc.CallOption) (*HookAck, error)
 }
 
 type subscriptionHooksClient struct {
@@ -55,100 +37,10 @@ func NewSubscriptionHooksClient(cc grpc.ClientConnInterface) SubscriptionHooksCl
 	return &subscriptionHooksClient{cc}
 }
 
-func (c *subscriptionHooksClient) OnTrialStarted(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error) {
+func (c *subscriptionHooksClient) Dispatch(ctx context.Context, in *Event, opts ...grpc.CallOption) (*HookAck, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HookAck)
-	err := c.cc.Invoke(ctx, SubscriptionHooks_OnTrialStarted_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *subscriptionHooksClient) OnTrialWillEnd(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HookAck)
-	err := c.cc.Invoke(ctx, SubscriptionHooks_OnTrialWillEnd_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *subscriptionHooksClient) OnActivated(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HookAck)
-	err := c.cc.Invoke(ctx, SubscriptionHooks_OnActivated_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *subscriptionHooksClient) OnRenewed(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HookAck)
-	err := c.cc.Invoke(ctx, SubscriptionHooks_OnRenewed_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *subscriptionHooksClient) OnPastDue(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HookAck)
-	err := c.cc.Invoke(ctx, SubscriptionHooks_OnPastDue_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *subscriptionHooksClient) OnRecovered(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HookAck)
-	err := c.cc.Invoke(ctx, SubscriptionHooks_OnRecovered_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *subscriptionHooksClient) OnCanceled(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HookAck)
-	err := c.cc.Invoke(ctx, SubscriptionHooks_OnCanceled_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *subscriptionHooksClient) OnDeactivated(ctx context.Context, in *LifecycleEvent, opts ...grpc.CallOption) (*HookAck, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HookAck)
-	err := c.cc.Invoke(ctx, SubscriptionHooks_OnDeactivated_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *subscriptionHooksClient) OnPaymentSucceeded(ctx context.Context, in *PaymentEvent, opts ...grpc.CallOption) (*HookAck, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HookAck)
-	err := c.cc.Invoke(ctx, SubscriptionHooks_OnPaymentSucceeded_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *subscriptionHooksClient) OnPaymentFailed(ctx context.Context, in *PaymentEvent, opts ...grpc.CallOption) (*HookAck, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HookAck)
-	err := c.cc.Invoke(ctx, SubscriptionHooks_OnPaymentFailed_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, SubscriptionHooks_Dispatch_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -159,16 +51,7 @@ func (c *subscriptionHooksClient) OnPaymentFailed(ctx context.Context, in *Payme
 // All implementations should embed UnimplementedSubscriptionHooksServer
 // for forward compatibility.
 type SubscriptionHooksServer interface {
-	OnTrialStarted(context.Context, *LifecycleEvent) (*HookAck, error)
-	OnTrialWillEnd(context.Context, *LifecycleEvent) (*HookAck, error)
-	OnActivated(context.Context, *LifecycleEvent) (*HookAck, error)
-	OnRenewed(context.Context, *LifecycleEvent) (*HookAck, error)
-	OnPastDue(context.Context, *LifecycleEvent) (*HookAck, error)
-	OnRecovered(context.Context, *LifecycleEvent) (*HookAck, error)
-	OnCanceled(context.Context, *LifecycleEvent) (*HookAck, error)
-	OnDeactivated(context.Context, *LifecycleEvent) (*HookAck, error)
-	OnPaymentSucceeded(context.Context, *PaymentEvent) (*HookAck, error)
-	OnPaymentFailed(context.Context, *PaymentEvent) (*HookAck, error)
+	Dispatch(context.Context, *Event) (*HookAck, error)
 }
 
 // UnimplementedSubscriptionHooksServer should be embedded to have
@@ -178,35 +61,8 @@ type SubscriptionHooksServer interface {
 // pointer dereference when methods are called.
 type UnimplementedSubscriptionHooksServer struct{}
 
-func (UnimplementedSubscriptionHooksServer) OnTrialStarted(context.Context, *LifecycleEvent) (*HookAck, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method OnTrialStarted not implemented")
-}
-func (UnimplementedSubscriptionHooksServer) OnTrialWillEnd(context.Context, *LifecycleEvent) (*HookAck, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method OnTrialWillEnd not implemented")
-}
-func (UnimplementedSubscriptionHooksServer) OnActivated(context.Context, *LifecycleEvent) (*HookAck, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method OnActivated not implemented")
-}
-func (UnimplementedSubscriptionHooksServer) OnRenewed(context.Context, *LifecycleEvent) (*HookAck, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method OnRenewed not implemented")
-}
-func (UnimplementedSubscriptionHooksServer) OnPastDue(context.Context, *LifecycleEvent) (*HookAck, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method OnPastDue not implemented")
-}
-func (UnimplementedSubscriptionHooksServer) OnRecovered(context.Context, *LifecycleEvent) (*HookAck, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method OnRecovered not implemented")
-}
-func (UnimplementedSubscriptionHooksServer) OnCanceled(context.Context, *LifecycleEvent) (*HookAck, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method OnCanceled not implemented")
-}
-func (UnimplementedSubscriptionHooksServer) OnDeactivated(context.Context, *LifecycleEvent) (*HookAck, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method OnDeactivated not implemented")
-}
-func (UnimplementedSubscriptionHooksServer) OnPaymentSucceeded(context.Context, *PaymentEvent) (*HookAck, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method OnPaymentSucceeded not implemented")
-}
-func (UnimplementedSubscriptionHooksServer) OnPaymentFailed(context.Context, *PaymentEvent) (*HookAck, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method OnPaymentFailed not implemented")
+func (UnimplementedSubscriptionHooksServer) Dispatch(context.Context, *Event) (*HookAck, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Dispatch not implemented")
 }
 func (UnimplementedSubscriptionHooksServer) testEmbeddedByValue() {}
 
@@ -228,182 +84,20 @@ func RegisterSubscriptionHooksServer(s grpc.ServiceRegistrar, srv SubscriptionHo
 	s.RegisterService(&SubscriptionHooks_ServiceDesc, srv)
 }
 
-func _SubscriptionHooks_OnTrialStarted_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LifecycleEvent)
+func _SubscriptionHooks_Dispatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Event)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SubscriptionHooksServer).OnTrialStarted(ctx, in)
+		return srv.(SubscriptionHooksServer).Dispatch(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: SubscriptionHooks_OnTrialStarted_FullMethodName,
+		FullMethod: SubscriptionHooks_Dispatch_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SubscriptionHooksServer).OnTrialStarted(ctx, req.(*LifecycleEvent))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _SubscriptionHooks_OnTrialWillEnd_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LifecycleEvent)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SubscriptionHooksServer).OnTrialWillEnd(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: SubscriptionHooks_OnTrialWillEnd_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SubscriptionHooksServer).OnTrialWillEnd(ctx, req.(*LifecycleEvent))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _SubscriptionHooks_OnActivated_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LifecycleEvent)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SubscriptionHooksServer).OnActivated(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: SubscriptionHooks_OnActivated_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SubscriptionHooksServer).OnActivated(ctx, req.(*LifecycleEvent))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _SubscriptionHooks_OnRenewed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LifecycleEvent)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SubscriptionHooksServer).OnRenewed(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: SubscriptionHooks_OnRenewed_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SubscriptionHooksServer).OnRenewed(ctx, req.(*LifecycleEvent))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _SubscriptionHooks_OnPastDue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LifecycleEvent)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SubscriptionHooksServer).OnPastDue(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: SubscriptionHooks_OnPastDue_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SubscriptionHooksServer).OnPastDue(ctx, req.(*LifecycleEvent))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _SubscriptionHooks_OnRecovered_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LifecycleEvent)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SubscriptionHooksServer).OnRecovered(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: SubscriptionHooks_OnRecovered_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SubscriptionHooksServer).OnRecovered(ctx, req.(*LifecycleEvent))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _SubscriptionHooks_OnCanceled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LifecycleEvent)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SubscriptionHooksServer).OnCanceled(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: SubscriptionHooks_OnCanceled_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SubscriptionHooksServer).OnCanceled(ctx, req.(*LifecycleEvent))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _SubscriptionHooks_OnDeactivated_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LifecycleEvent)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SubscriptionHooksServer).OnDeactivated(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: SubscriptionHooks_OnDeactivated_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SubscriptionHooksServer).OnDeactivated(ctx, req.(*LifecycleEvent))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _SubscriptionHooks_OnPaymentSucceeded_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PaymentEvent)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SubscriptionHooksServer).OnPaymentSucceeded(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: SubscriptionHooks_OnPaymentSucceeded_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SubscriptionHooksServer).OnPaymentSucceeded(ctx, req.(*PaymentEvent))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _SubscriptionHooks_OnPaymentFailed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PaymentEvent)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SubscriptionHooksServer).OnPaymentFailed(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: SubscriptionHooks_OnPaymentFailed_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SubscriptionHooksServer).OnPaymentFailed(ctx, req.(*PaymentEvent))
+		return srv.(SubscriptionHooksServer).Dispatch(ctx, req.(*Event))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -416,44 +110,8 @@ var SubscriptionHooks_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*SubscriptionHooksServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "OnTrialStarted",
-			Handler:    _SubscriptionHooks_OnTrialStarted_Handler,
-		},
-		{
-			MethodName: "OnTrialWillEnd",
-			Handler:    _SubscriptionHooks_OnTrialWillEnd_Handler,
-		},
-		{
-			MethodName: "OnActivated",
-			Handler:    _SubscriptionHooks_OnActivated_Handler,
-		},
-		{
-			MethodName: "OnRenewed",
-			Handler:    _SubscriptionHooks_OnRenewed_Handler,
-		},
-		{
-			MethodName: "OnPastDue",
-			Handler:    _SubscriptionHooks_OnPastDue_Handler,
-		},
-		{
-			MethodName: "OnRecovered",
-			Handler:    _SubscriptionHooks_OnRecovered_Handler,
-		},
-		{
-			MethodName: "OnCanceled",
-			Handler:    _SubscriptionHooks_OnCanceled_Handler,
-		},
-		{
-			MethodName: "OnDeactivated",
-			Handler:    _SubscriptionHooks_OnDeactivated_Handler,
-		},
-		{
-			MethodName: "OnPaymentSucceeded",
-			Handler:    _SubscriptionHooks_OnPaymentSucceeded_Handler,
-		},
-		{
-			MethodName: "OnPaymentFailed",
-			Handler:    _SubscriptionHooks_OnPaymentFailed_Handler,
+			MethodName: "Dispatch",
+			Handler:    _SubscriptionHooks_Dispatch_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
