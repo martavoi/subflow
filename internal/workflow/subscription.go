@@ -1,3 +1,7 @@
+// Package workflow is the workflow-native Subscription aggregate. There is no
+// separate domain/subscription layer — the struct, value objects, and lifecycle
+// methods all live here. See docs/adr/0001-workflow-native-subscription-aggregate.md
+// for the rationale.
 package workflow
 
 import (
@@ -6,7 +10,6 @@ import (
 	"time"
 
 	"github.com/martavoi/subflow/internal/domain/plan"
-	"github.com/martavoi/subflow/internal/domain/subscription"
 	subflowtemporal "github.com/martavoi/subflow/internal/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -51,7 +54,7 @@ type Subscription struct {
 	Phase           Phase
 	Period          BillingPeriod
 	RenewalCount    int
-	Context         subscription.Context
+	Context         Context
 	CancelRequested bool
 
 	// Dunning state
@@ -69,7 +72,7 @@ type Subscription struct {
 
 // NewSubscription builds a fresh Subscription entity from workflow input.
 // Pure; safe to call during workflow replay.
-func NewSubscription(in subscription.SubscriptionInput) *Subscription {
+func NewSubscription(in SubscriptionInput) *Subscription {
 	return &Subscription{
 		SubscriptionID:  in.SubscriptionID,
 		IntervalID:      in.IntervalID,
@@ -87,7 +90,7 @@ func NewSubscription(in subscription.SubscriptionInput) *Subscription {
 
 // SubscriptionWorkflow is the top-level workflow function registered with
 // the worker. Real lifecycle logic in (*Subscription).Run (filled by T21).
-func SubscriptionWorkflow(ctx workflow.Context, in subscription.SubscriptionInput) error {
+func SubscriptionWorkflow(ctx workflow.Context, in SubscriptionInput) error {
 	return NewSubscription(in).Run(ctx)
 }
 
@@ -114,7 +117,7 @@ func (s *Subscription) Run(ctx workflow.Context) error {
 		}
 	} else {
 		if err := s.Renew(ctx); err != nil {
-			if dunErr := s.HandleDunning(ctx); dunErr != nil {
+			if dunErr := s.Dun(ctx); dunErr != nil {
 				if errors.Is(dunErr, ErrDunningExhausted) {
 					return s.Deactivate(ctx)
 				}
@@ -123,17 +126,17 @@ func (s *Subscription) Run(ctx workflow.Context) error {
 		}
 	}
 
-	if cancelled := s.AwaitPeriodEndOrCancellation(ctx); cancelled {
+	if cancelled := s.AwaitEnd(ctx); cancelled {
 		return s.Deactivate(ctx)
 	}
-	return s.ContinueIntoNextPeriod(ctx)
+	return s.NextPeriod(ctx)
 }
 
 // ActivationResult is the response to the UpdateActivate update — returned
 // synchronously to the API caller via UpdateWithStartWorkflow.
 type ActivationResult struct {
 	Phase   string
-	Context subscription.Context
+	Context Context
 }
 
 // transitionTo moves the entity into a new lifecycle phase AND publishes the

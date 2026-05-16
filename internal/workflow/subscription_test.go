@@ -7,7 +7,6 @@ import (
 	activityPkg "github.com/martavoi/subflow/internal/activity"
 	"github.com/martavoi/subflow/internal/billing"
 	"github.com/martavoi/subflow/internal/domain/plan"
-	"github.com/martavoi/subflow/internal/domain/subscription"
 	"github.com/martavoi/subflow/internal/hook"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
@@ -17,7 +16,7 @@ import (
 // sampleInput builds a SubscriptionInput with all 10 hooks enabled so test
 // observers can count fire counts. Period anchored at time.Now to play nicely
 // with the test harness mock clock.
-func sampleInput(mods ...func(*plan.Snapshot)) subscription.SubscriptionInput {
+func sampleInput(mods ...func(*plan.Snapshot)) SubscriptionInput {
 	start := time.Now().UTC().Truncate(time.Second)
 	p := plan.Snapshot{
 		Code:                "monthly-basic",
@@ -36,7 +35,7 @@ func sampleInput(mods ...func(*plan.Snapshot)) subscription.SubscriptionInput {
 	for _, m := range mods {
 		m(&p)
 	}
-	return subscription.SubscriptionInput{
+	return SubscriptionInput{
 		SubscriptionID: "sub-1",
 		IntervalID:     "interval-1",
 		UserID:         "user-1",
@@ -44,7 +43,7 @@ func sampleInput(mods ...func(*plan.Snapshot)) subscription.SubscriptionInput {
 		Plan:           p,
 		PeriodStart:    start,
 		PeriodEnd:      start.Add(p.Cadence),
-		Context:        subscription.Context{"card_id": "card_001"},
+		Context:        Context{"card_id": "card_001"},
 	}
 }
 

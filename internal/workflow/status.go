@@ -1,10 +1,6 @@
 package workflow
 
-import (
-	"time"
-
-	"github.com/martavoi/subflow/internal/domain/subscription"
-)
+import "time"
 
 // Status is the snapshot returned by the QuerySubscriptionStatus query.
 type Status struct {
@@ -14,7 +10,7 @@ type Status struct {
 	PeriodStart           time.Time
 	PeriodEnd             time.Time
 	RenewalCount          int
-	Context               subscription.Context
+	Context               Context
 	CancelRequested       bool
 	DunningAttempt        int
 	LastChargedAt         time.Time

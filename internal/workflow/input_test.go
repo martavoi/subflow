@@ -1,4 +1,4 @@
-package subscription
+package workflow
 
 import (
 	"testing"

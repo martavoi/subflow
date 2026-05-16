@@ -9,7 +9,6 @@ import (
 
 	subflowv1 "github.com/martavoi/subflow/api/v1"
 	"github.com/martavoi/subflow/internal/domain/plan"
-	"github.com/martavoi/subflow/internal/domain/subscription"
 	"github.com/martavoi/subflow/internal/store"
 	subflowtemporal "github.com/martavoi/subflow/internal/temporal"
 	"github.com/martavoi/subflow/internal/workflow"
@@ -60,7 +59,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req *subfl
 		periodEnd = now.Add(p.TrialDuration)
 	}
 
-	wfInput := subscription.SubscriptionInput{
+	wfInput := workflow.SubscriptionInput{
 		SubscriptionID: subID,
 		IntervalID:     uuid.NewString(),
 		UserID:         req.UserId,
@@ -68,7 +67,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req *subfl
 		Plan:           plan.SnapshotOf(p),
 		PeriodStart:    now,
 		PeriodEnd:      periodEnd,
-		Context:        subscription.Context(req.InitialContext),
+		Context:        workflow.Context(req.InitialContext),
 	}
 
 	initialPhase := "active"
