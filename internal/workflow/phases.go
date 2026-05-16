@@ -36,7 +36,7 @@ func (s *Subscription) Trial(ctx workflow.Context) (trialOutcome, error) {
 	_ = workflow.UpsertTypedSearchAttributes(ctx,
 		subflowtemporal.KeyTrialEnd.ValueSet(s.Period.End),
 	)
-	_ = s.FireLifecycleHook(ctx, hook.TrialStarted)
+	_ = s.fireLifecycle(ctx, hook.TrialStarted)
 
 	now := workflow.Now(ctx)
 	if !s.Period.End.After(now) {
@@ -76,7 +76,7 @@ func (s *Subscription) Trial(ctx workflow.Context) (trialOutcome, error) {
 		// for the end timer (or cancel).
 		if noticeFired && !ended && !s.CancelRequested {
 			// dispatch only once; the predicate above prevents re-add to selector
-			_ = s.FireLifecycleHook(ctx, hook.TrialWillEnd)
+			_ = s.fireLifecycle(ctx, hook.TrialWillEnd)
 		}
 	}
 
@@ -128,7 +128,7 @@ func (s *Subscription) Activate(ctx workflow.Context) error {
 		return err
 	}
 	s.transitionTo(ctx, PhaseActive)
-	_ = s.FireLifecycleHook(ctx, hook.Activated)
+	_ = s.fireLifecycle(ctx, hook.Activated)
 	return nil
 }
 
@@ -140,7 +140,7 @@ func (s *Subscription) Renew(ctx workflow.Context) error {
 		return err
 	}
 	s.transitionTo(ctx, PhaseActive)
-	_ = s.FireLifecycleHook(ctx, hook.Renewed)
+	_ = s.fireLifecycle(ctx, hook.Renewed)
 	return nil
 }
 
@@ -150,7 +150,7 @@ func (s *Subscription) Renew(ctx workflow.Context) error {
 // if all attempts fail.
 func (s *Subscription) Dun(ctx workflow.Context) error {
 	s.transitionTo(ctx, PhasePastDue)
-	_ = s.FireLifecycleHook(ctx, hook.PastDue)
+	_ = s.fireLifecycle(ctx, hook.PastDue)
 
 	for s.DunningAttempt < s.Plan.DunningMaxAttempts {
 		s.DunningAttempt++
@@ -163,7 +163,7 @@ func (s *Subscription) Dun(ctx workflow.Context) error {
 			// Recovered.
 			s.DunningAttempt = 0
 			s.transitionTo(ctx, PhaseActive)
-			_ = s.FireLifecycleHook(ctx, hook.Recovered)
+			_ = s.fireLifecycle(ctx, hook.Recovered)
 			return nil
 		}
 		// Charge failed again — loop.
@@ -183,7 +183,7 @@ func (s *Subscription) AwaitEnd(ctx workflow.Context) bool {
 	// immediately and sleep out the remainder.
 	if s.CancelRequested {
 		s.transitionTo(ctx, PhaseCanceled)
-		_ = s.FireLifecycleHook(ctx, hook.Canceled)
+		_ = s.fireLifecycle(ctx, hook.Canceled)
 		if remaining := s.Period.End.Sub(workflow.Now(ctx)); remaining > 0 {
 			_ = workflow.Sleep(ctx, remaining)
 		}
@@ -210,7 +210,7 @@ func (s *Subscription) AwaitEnd(ctx workflow.Context) bool {
 	// Cancel arrived during the wait. Mark canceled, fire hook, sleep the
 	// remainder, then return true.
 	s.transitionTo(ctx, PhaseCanceled)
-	_ = s.FireLifecycleHook(ctx, hook.Canceled)
+	_ = s.fireLifecycle(ctx, hook.Canceled)
 	if remaining := s.Period.End.Sub(workflow.Now(ctx)); remaining > 0 {
 		_ = workflow.Sleep(ctx, remaining)
 	}
@@ -221,7 +221,7 @@ func (s *Subscription) AwaitEnd(ctx workflow.Context) bool {
 // After this returns, the workflow run completes (no CAN).
 func (s *Subscription) Deactivate(ctx workflow.Context) error {
 	s.transitionTo(ctx, PhaseDeactivated)
-	_ = s.FireLifecycleHook(ctx, hook.Deactivated)
+	_ = s.fireLifecycle(ctx, hook.Deactivated)
 	return nil
 }
 

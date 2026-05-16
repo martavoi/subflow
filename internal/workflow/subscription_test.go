@@ -56,7 +56,7 @@ func newHookRecord() *hookRecord {
 	return &hookRecord{lifecycle: map[string]int{}, payment: map[string]int{}}
 }
 
-// registerMocks registers activity mocks for all 12 registered activity names.
+// registerMocks registers activity mocks for all 3 registered activity names.
 // chargeBehavior, if provided, is called for each ChargePayment attempt with
 // the 1-based attempt index; return nil for success or an error to fail.
 func registerMocks(env *testsuite.TestWorkflowEnvironment, rec *hookRecord, chargeBehavior func(attempt int) error) {
@@ -80,28 +80,15 @@ func registerMocks(env *testsuite.TestWorkflowEnvironment, rec *hookRecord, char
 		activity.RegisterOptions{Name: "RecordBillingEvent"},
 	)
 
-	mkLifecycle := func(name string) func(activityPkg.LifecycleHookInput) error {
-		return func(_ activityPkg.LifecycleHookInput) error {
-			rec.lifecycle[name]++
-			return nil
+	mockDispatch := func(in activityPkg.DispatchHook) error {
+		if in.Lifecycle != nil {
+			rec.lifecycle[string(in.Type)]++
+		} else if in.Payment != nil {
+			rec.payment[string(in.Type)]++
 		}
+		return nil
 	}
-	mkPayment := func(name string) func(activityPkg.PaymentHookInput) error {
-		return func(_ activityPkg.PaymentHookInput) error {
-			rec.payment[name]++
-			return nil
-		}
-	}
-	env.RegisterActivityWithOptions(mkLifecycle("subscription.trial_started"), activity.RegisterOptions{Name: "OnTrialStarted"})
-	env.RegisterActivityWithOptions(mkLifecycle("subscription.trial_will_end"), activity.RegisterOptions{Name: "OnTrialWillEnd"})
-	env.RegisterActivityWithOptions(mkLifecycle("subscription.activated"), activity.RegisterOptions{Name: "OnActivated"})
-	env.RegisterActivityWithOptions(mkLifecycle("subscription.renewed"), activity.RegisterOptions{Name: "OnRenewed"})
-	env.RegisterActivityWithOptions(mkLifecycle("subscription.past_due"), activity.RegisterOptions{Name: "OnPastDue"})
-	env.RegisterActivityWithOptions(mkLifecycle("subscription.recovered"), activity.RegisterOptions{Name: "OnRecovered"})
-	env.RegisterActivityWithOptions(mkLifecycle("subscription.canceled"), activity.RegisterOptions{Name: "OnCanceled"})
-	env.RegisterActivityWithOptions(mkLifecycle("subscription.deactivated"), activity.RegisterOptions{Name: "OnDeactivated"})
-	env.RegisterActivityWithOptions(mkPayment("payment.succeeded"), activity.RegisterOptions{Name: "OnPaymentSucceeded"})
-	env.RegisterActivityWithOptions(mkPayment("payment.failed"), activity.RegisterOptions{Name: "OnPaymentFailed"})
+	env.RegisterActivityWithOptions(mockDispatch, activity.RegisterOptions{Name: "DispatchHook"})
 }
 
 func TestSubscription_HappyActivation_ContinuesAsNew(t *testing.T) {

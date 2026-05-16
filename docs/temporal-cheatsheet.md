@@ -15,7 +15,7 @@
 | Per-user limit | `client.CountWorkflow` | `internal/server/subscriptions.go` countActiveForUser |
 | Charge | Activity `ChargePayment` with retry policy | `internal/activity/payment.go` |
 | Billing history | Activity `RecordBillingEvent` writing to `billing_events` | `internal/activity/billing.go` + `internal/billing/mongo_store.go` |
-| Lifecycle hooks | 10 activities dispatching to gRPC integration | `internal/activity/hooks.go` |
+| Lifecycle hooks | 1 activity (`DispatchHook`) dispatching to a single `Dispatch` rpc on the integration | `internal/activity/hooks.go` |
 | Dunning loop | `workflow.Sleep` + `workflow.UpsertSearchAttributes` | `internal/workflow/dunning.go` |
 | Idempotency token | `<workflowID>:<runID>:<purpose>` | `(*Subscription).idempotencyKey` |
 

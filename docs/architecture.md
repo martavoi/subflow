@@ -20,19 +20,10 @@
                                ┌──────────────────────┐
                                │  subflow-worker      │
                                │  - SubscriptionWF    │
-                               │  - 12 activities:    │
+                               │  - 3 activities:     │
                                │    ChargePayment     │
                                │    RecordBillingEv.  │
-                               │    OnTrialStarted    │
-                               │    OnTrialWillEnd    │
-                               │    OnActivated       │
-                               │    OnRenewed         │
-                               │    OnPastDue         │
-                               │    OnRecovered       │
-                               │    OnCanceled        │
-                               │    OnDeactivated     │
-                               │    OnPaymentSucc.    │
-                               │    OnPaymentFailed   │
+                               │    DispatchHook      │
                                └──────────┬───────────┘
                                           │ gRPC calls + Mongo writes
                                           ▼
@@ -54,8 +45,8 @@
 | Component | Role |
 |---|---|
 | `subflow-api` | gRPC on :50051. Translates RPCs to Temporal operations (Start/Signal/Update/Query/List/Count) + Mongo CRUD. Registers custom search attributes at startup. No business logic. |
-| `subflow-worker` | Temporal worker. Hosts `SubscriptionWorkflow` and 12 activities. Polls the `subflow` task queue. |
-| `mock-integration` | gRPC on :50052 implementing `SubscriptionHooks` (10 methods). Failure/latency knobs for retry demos. |
+| `subflow-worker` | Temporal worker. Hosts `SubscriptionWorkflow` and 3 activities. Polls the `subflow` task queue. |
+| `mock-integration` | gRPC on :50052 implementing `SubscriptionHooks` (1 `Dispatch` rpc). Failure/latency knobs for retry demos. |
 | `temporal` | Single-binary dev server. SQLite persistence (workflow histories + visibility index). Bundled Web UI on :8233. Custom search attributes registered idempotently at startup. |
 | `mongo` | Mongo 7. Holds `plans` (source of truth for plan config) and `billing_events` (append-only charge history). |
 

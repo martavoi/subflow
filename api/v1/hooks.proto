@@ -7,45 +7,36 @@ option go_package = "github.com/martavoi/subflow/api/v1;subflowv1";
 import "google/protobuf/timestamp.proto";
 
 service SubscriptionHooks {
-  rpc OnTrialStarted     (LifecycleEvent) returns (HookAck);
-  rpc OnTrialWillEnd     (LifecycleEvent) returns (HookAck);
-  rpc OnActivated        (LifecycleEvent) returns (HookAck);
-  rpc OnRenewed          (LifecycleEvent) returns (HookAck);
-  rpc OnPastDue          (LifecycleEvent) returns (HookAck);
-  rpc OnRecovered        (LifecycleEvent) returns (HookAck);
-  rpc OnCanceled         (LifecycleEvent) returns (HookAck);
-  rpc OnDeactivated      (LifecycleEvent) returns (HookAck);
-
-  rpc OnPaymentSucceeded (PaymentEvent)   returns (HookAck);
-  rpc OnPaymentFailed    (PaymentEvent)   returns (HookAck);
+  rpc Dispatch (Event) returns (HookAck);
 }
 
-message LifecycleEvent {
-  string reference = 1;
-  string subscription_id = 2;
-  string user_id = 3;
-  string plan_code = 4;
-  string phase = 5;
-  int32 renewal_count = 6;
-  google.protobuf.Timestamp period_start = 7;
-  google.protobuf.Timestamp period_end = 8;
-  google.protobuf.Timestamp event_time = 9;
-  map<string,string> context = 10;
+message Event {
+  string id = 1;
+  string type = 2;                            // hook.Type wire name (e.g. "subscription.activated")
+  google.protobuf.Timestamp created_at = 3;
+  map<string, string> context = 4;
+  string subscription_id = 5;
+  string user_id = 6;
+  string plan_code = 7;
+  int32 renewal_count = 8;
+  oneof data {
+    LifecycleData lifecycle = 9;
+    PaymentData payment = 10;
+  }
 }
 
-message PaymentEvent {
-  string reference = 1;
-  string subscription_id = 2;
-  string user_id = 3;
-  string plan_code = 4;
-  int32 renewal_count = 5;
-  int32 dunning_attempt = 6;
-  int64 amount_cents = 7;
-  string currency = 8;
-  string transaction_id = 9;
-  string failure_reason = 10;
-  google.protobuf.Timestamp event_time = 11;
-  map<string,string> context = 12;
+message LifecycleData {
+  string phase = 1;
+  google.protobuf.Timestamp period_start = 2;
+  google.protobuf.Timestamp period_end = 3;
+}
+
+message PaymentData {
+  int32 dunning_attempt = 1;
+  int64 amount_cents = 2;
+  string currency = 3;
+  string transaction_id = 4;
+  string failure_reason = 5;
 }
 
 message HookAck {}
