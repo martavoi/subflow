@@ -1,6 +1,9 @@
 package workflow
 
-import "go.temporal.io/sdk/workflow"
+import (
+	"github.com/martavoi/subflow/internal/hook"
+	"go.temporal.io/sdk/workflow"
+)
 
 // AwaitActivation registers the Activate update handler and blocks on
 // workflow.Await until activation completes. The handler runs Activate(),
@@ -44,6 +47,6 @@ func (s *Subscription) Activate(ctx workflow.Context) error {
 		return err
 	}
 	s.transitionTo(ctx, PhaseActive)
-	_ = s.FireLifecycleHook(ctx, HookActivated)
+	_ = s.FireLifecycleHook(ctx, hook.Activated)
 	return nil
 }

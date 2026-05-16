@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/martavoi/subflow/internal/domain/plan"
+	"github.com/martavoi/subflow/internal/hook"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -27,7 +28,7 @@ type planDoc struct {
 	DunningMaxAttempts   int             `bson:"dunning_max_attempts"`
 	DunningRetryBackoff  string          `bson:"dunning_retry_backoff"`
 	IntegrationEndpoint  string          `bson:"integration_endpoint"`
-	EnabledHooks         []plan.HookName `bson:"enabled_hooks"`
+	EnabledHooks         []hook.Type `bson:"enabled_hooks"`
 	CreatedAt            time.Time       `bson:"created_at"`
 }
 
@@ -123,7 +124,7 @@ func planToDoc(p plan.Plan) planDoc {
 		DunningMaxAttempts:   p.DunningMaxAttempts,
 		DunningRetryBackoff:  durationOrEmpty(p.DunningRetryBackoff),
 		IntegrationEndpoint:  p.IntegrationEndpoint,
-		EnabledHooks:         append([]plan.HookName(nil), p.EnabledHooks...),
+		EnabledHooks:         append([]hook.Type(nil), p.EnabledHooks...),
 		CreatedAt:            p.CreatedAt,
 	}
 }
@@ -158,7 +159,7 @@ func docToPlan(d planDoc) (plan.Plan, error) {
 		DunningMaxAttempts:   d.DunningMaxAttempts,
 		DunningRetryBackoff:  backoff,
 		IntegrationEndpoint:  d.IntegrationEndpoint,
-		EnabledHooks:         append([]plan.HookName(nil), d.EnabledHooks...),
+		EnabledHooks:         append([]hook.Type(nil), d.EnabledHooks...),
 		CreatedAt:            d.CreatedAt,
 	}, nil
 }

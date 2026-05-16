@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"github.com/martavoi/subflow/internal/hook"
 	subflowtemporal "github.com/martavoi/subflow/internal/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -27,7 +28,7 @@ func (s *Subscription) Trial(ctx workflow.Context) (trialOutcome, error) {
 	_ = workflow.UpsertTypedSearchAttributes(ctx,
 		subflowtemporal.KeyTrialEnd.ValueSet(s.Period.End),
 	)
-	_ = s.FireLifecycleHook(ctx, HookTrialStarted)
+	_ = s.FireLifecycleHook(ctx, hook.TrialStarted)
 
 	now := workflow.Now(ctx)
 	if !s.Period.End.After(now) {
@@ -67,7 +68,7 @@ func (s *Subscription) Trial(ctx workflow.Context) (trialOutcome, error) {
 		// for the end timer (or cancel).
 		if noticeFired && !ended && !s.CancelRequested {
 			// dispatch only once; the predicate above prevents re-add to selector
-			_ = s.FireLifecycleHook(ctx, HookTrialWillEnd)
+			_ = s.FireLifecycleHook(ctx, hook.TrialWillEnd)
 		}
 	}
 

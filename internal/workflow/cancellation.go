@@ -1,6 +1,9 @@
 package workflow
 
-import "go.temporal.io/sdk/workflow"
+import (
+	"github.com/martavoi/subflow/internal/hook"
+	"go.temporal.io/sdk/workflow"
+)
 
 // AwaitPeriodEndOrCancellation blocks until either the period timer fires or
 // a cancel signal arrives. End-of-period semantics: if cancel arrives early,
@@ -13,7 +16,7 @@ func (s *Subscription) AwaitPeriodEndOrCancellation(ctx workflow.Context) bool {
 	// immediately and sleep out the remainder.
 	if s.CancelRequested {
 		s.transitionTo(ctx, PhaseCanceled)
-		_ = s.FireLifecycleHook(ctx, HookCanceled)
+		_ = s.FireLifecycleHook(ctx, hook.Canceled)
 		if remaining := s.Period.End.Sub(workflow.Now(ctx)); remaining > 0 {
 			_ = workflow.Sleep(ctx, remaining)
 		}
@@ -40,7 +43,7 @@ func (s *Subscription) AwaitPeriodEndOrCancellation(ctx workflow.Context) bool {
 	// Cancel arrived during the wait. Mark canceled, fire hook, sleep the
 	// remainder, then return true.
 	s.transitionTo(ctx, PhaseCanceled)
-	_ = s.FireLifecycleHook(ctx, HookCanceled)
+	_ = s.FireLifecycleHook(ctx, hook.Canceled)
 	if remaining := s.Period.End.Sub(workflow.Now(ctx)); remaining > 0 {
 		_ = workflow.Sleep(ctx, remaining)
 	}
@@ -51,6 +54,6 @@ func (s *Subscription) AwaitPeriodEndOrCancellation(ctx workflow.Context) bool {
 // After this returns, the workflow run completes (no CAN).
 func (s *Subscription) Deactivate(ctx workflow.Context) error {
 	s.transitionTo(ctx, PhaseDeactivated)
-	_ = s.FireLifecycleHook(ctx, HookDeactivated)
+	_ = s.FireLifecycleHook(ctx, hook.Deactivated)
 	return nil
 }

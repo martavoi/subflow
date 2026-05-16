@@ -5,60 +5,45 @@ import (
 	"time"
 
 	"github.com/martavoi/subflow/internal/activity"
-	"github.com/martavoi/subflow/internal/domain/plan"
+	"github.com/martavoi/subflow/internal/hook"
 	"go.temporal.io/sdk/workflow"
 )
 
-// Hook is a typed identifier for a lifecycle event the integration can
-// subscribe to. Each Hook bundles its wire name (the string used over the
-// network and in plan configuration) with the registered Temporal activity
-// name. Co-locating both eliminates name-mapping switches.
-type Hook struct {
-	Name         string
-	ActivityName string
-}
-
-// String makes Hook printable via the wire name.
-func (h Hook) String() string { return h.Name }
-
-// The 10 hooks subflow supports.
-var (
-	HookTrialStarted  = Hook{Name: "subscription.trial_started", ActivityName: "OnTrialStarted"}
-	HookTrialWillEnd  = Hook{Name: "subscription.trial_will_end", ActivityName: "OnTrialWillEnd"}
-	HookActivated     = Hook{Name: "subscription.activated", ActivityName: "OnActivated"}
-	HookRenewed       = Hook{Name: "subscription.renewed", ActivityName: "OnRenewed"}
-	HookPastDue       = Hook{Name: "subscription.past_due", ActivityName: "OnPastDue"}
-	HookRecovered     = Hook{Name: "subscription.recovered", ActivityName: "OnRecovered"}
-	HookCanceled      = Hook{Name: "subscription.canceled", ActivityName: "OnCanceled"}
-	HookDeactivated   = Hook{Name: "subscription.deactivated", ActivityName: "OnDeactivated"}
-	HookPaymentOK     = Hook{Name: "payment.succeeded", ActivityName: "OnPaymentSucceeded"}
-	HookPaymentFailed = Hook{Name: "payment.failed", ActivityName: "OnPaymentFailed"}
-)
-
-// AllHooks is the canonical list — used for plan validation and tests.
-var AllHooks = []Hook{
-	HookTrialStarted, HookTrialWillEnd,
-	HookActivated, HookRenewed,
-	HookPastDue, HookRecovered,
-	HookCanceled, HookDeactivated,
-	HookPaymentOK, HookPaymentFailed,
-}
-
-// HookByName returns the Hook for a wire name, or (Hook{}, false) if unknown.
-func HookByName(name string) (Hook, bool) {
-	for _, h := range AllHooks {
-		if h.Name == name {
-			return h, true
-		}
+// activityNameForHook maps a hook.Type to the registered Temporal activity
+// name. This mapping lives here (not in the hook package) because activity
+// registration names are a workflow concern, not a domain concern.
+func activityNameForHook(h hook.Type) string {
+	switch h {
+	case hook.TrialStarted:
+		return "OnTrialStarted"
+	case hook.TrialWillEnd:
+		return "OnTrialWillEnd"
+	case hook.Activated:
+		return "OnActivated"
+	case hook.Renewed:
+		return "OnRenewed"
+	case hook.PastDue:
+		return "OnPastDue"
+	case hook.Recovered:
+		return "OnRecovered"
+	case hook.Canceled:
+		return "OnCanceled"
+	case hook.Deactivated:
+		return "OnDeactivated"
+	case hook.PaymentOK:
+		return "OnPaymentSucceeded"
+	case hook.PaymentFailed:
+		return "OnPaymentFailed"
+	default:
+		// RenewalUpcoming and any future hooks not yet wired to an activity.
+		return ""
 	}
-	return Hook{}, false
 }
 
-// isEnabled reports whether the plan opted into this hook. Reads the typed
-// HookName slice from the plan snapshot directly — no string mapping.
-func (h Hook) isEnabled(enabled []plan.HookName) bool {
-	for _, n := range enabled {
-		if string(n) == h.Name {
+// isEnabled reports whether the plan opted into this hook.
+func isEnabled(h hook.Type, enabled []hook.Type) bool {
+	for _, e := range enabled {
+		if e == h {
 			return true
 		}
 	}
@@ -66,16 +51,18 @@ func (h Hook) isEnabled(enabled []plan.HookName) bool {
 }
 
 // FireLifecycleHook dispatches a subscription-level hook. No-op if the plan
-// has no integration endpoint or didn't opt into this hook.
-func (s *Subscription) FireLifecycleHook(ctx workflow.Context, h Hook) error {
-	if s.Plan.IntegrationEndpoint == "" || !h.isEnabled(s.Plan.EnabledHooks) {
+// has no integration endpoint, didn't opt into this hook, or the hook has no
+// registered activity yet.
+func (s *Subscription) FireLifecycleHook(ctx workflow.Context, h hook.Type) error {
+	actName := activityNameForHook(h)
+	if s.Plan.IntegrationEndpoint == "" || actName == "" || !isEnabled(h, s.Plan.EnabledHooks) {
 		return nil
 	}
-	ref := s.idempotencyKey("hook:" + h.Name)
+	ref := s.idempotencyKey("hook:" + string(h))
 	in := activity.LifecycleHookInput{
 		Reference:           ref,
 		IntegrationEndpoint: s.Plan.IntegrationEndpoint,
-		HookName:            h.Name,
+		HookName:            string(h),
 		SubscriptionID:      s.SubscriptionID,
 		UserID:              s.UserID,
 		PlanCode:            s.PlanCode,
@@ -90,20 +77,21 @@ func (s *Subscription) FireLifecycleHook(ctx workflow.Context, h Hook) error {
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy:         activity.HookRetry,
 	})
-	return workflow.ExecuteActivity(opts, h.ActivityName, in).Get(ctx, nil)
+	return workflow.ExecuteActivity(opts, actName, in).Get(ctx, nil)
 }
 
 // FirePaymentHook dispatches a payment-level hook. Same gating + retry policy
 // as FireLifecycleHook; different payload.
-func (s *Subscription) FirePaymentHook(ctx workflow.Context, h Hook, dunningAttempt int, transactionID, failureReason string) error {
-	if s.Plan.IntegrationEndpoint == "" || !h.isEnabled(s.Plan.EnabledHooks) {
+func (s *Subscription) FirePaymentHook(ctx workflow.Context, h hook.Type, dunningAttempt int, transactionID, failureReason string) error {
+	actName := activityNameForHook(h)
+	if s.Plan.IntegrationEndpoint == "" || actName == "" || !isEnabled(h, s.Plan.EnabledHooks) {
 		return nil
 	}
-	ref := s.idempotencyKey(fmt.Sprintf("hook:%s:%d", h.Name, dunningAttempt))
+	ref := s.idempotencyKey(fmt.Sprintf("hook:%s:%d", string(h), dunningAttempt))
 	in := activity.PaymentHookInput{
 		Reference:           ref,
 		IntegrationEndpoint: s.Plan.IntegrationEndpoint,
-		HookName:            h.Name,
+		HookName:            string(h),
 		SubscriptionID:      s.SubscriptionID,
 		UserID:              s.UserID,
 		PlanCode:            s.PlanCode,
@@ -120,5 +108,5 @@ func (s *Subscription) FirePaymentHook(ctx workflow.Context, h Hook, dunningAtte
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy:         activity.HookRetry,
 	})
-	return workflow.ExecuteActivity(opts, h.ActivityName, in).Get(ctx, nil)
+	return workflow.ExecuteActivity(opts, actName, in).Get(ctx, nil)
 }
