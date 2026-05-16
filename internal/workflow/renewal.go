@@ -1,6 +1,9 @@
 package workflow
 
-import "go.temporal.io/sdk/workflow"
+import (
+	"github.com/martavoi/subflow/internal/hook"
+	"go.temporal.io/sdk/workflow"
+)
 
 // Renew runs the renewal-period activities: charge → record event → fire
 // payment + renewed hooks. Returns the original charge error so the caller
@@ -10,6 +13,6 @@ func (s *Subscription) Renew(ctx workflow.Context) error {
 		return err
 	}
 	s.transitionTo(ctx, PhaseActive)
-	_ = s.FireLifecycleHook(ctx, HookRenewed)
+	_ = s.FireLifecycleHook(ctx, hook.Renewed)
 	return nil
 }

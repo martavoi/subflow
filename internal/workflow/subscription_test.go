@@ -8,6 +8,7 @@ import (
 	"github.com/martavoi/subflow/internal/billing"
 	"github.com/martavoi/subflow/internal/domain/plan"
 	"github.com/martavoi/subflow/internal/domain/subscription"
+	"github.com/martavoi/subflow/internal/hook"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
@@ -24,12 +25,12 @@ func sampleInput(mods ...func(*plan.Snapshot)) subscription.SubscriptionInput {
 		PriceCents:          999,
 		Currency:            "USD",
 		IntegrationEndpoint: "mock:50052",
-		EnabledHooks: []plan.HookName{
-			plan.HookNameTrialStarted, plan.HookNameTrialWillEnd,
-			plan.HookNameActivated, plan.HookNameRenewed,
-			plan.HookNamePastDue, plan.HookNameRecovered,
-			plan.HookNameCanceled, plan.HookNameDeactivated,
-			plan.HookNamePaymentOK, plan.HookNamePaymentFailed,
+		EnabledHooks: []hook.Type{
+			hook.TrialStarted, hook.TrialWillEnd,
+			hook.Activated, hook.Renewed,
+			hook.PastDue, hook.Recovered,
+			hook.Canceled, hook.Deactivated,
+			hook.PaymentOK, hook.PaymentFailed,
 		},
 	}
 	for _, m := range mods {

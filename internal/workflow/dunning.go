@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/martavoi/subflow/internal/hook"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -17,7 +18,7 @@ var ErrDunningExhausted = errors.New("dunning exhausted")
 // if all attempts fail.
 func (s *Subscription) HandleDunning(ctx workflow.Context) error {
 	s.transitionTo(ctx, PhasePastDue)
-	_ = s.FireLifecycleHook(ctx, HookPastDue)
+	_ = s.FireLifecycleHook(ctx, hook.PastDue)
 
 	for s.DunningAttempt < s.Plan.DunningMaxAttempts {
 		s.DunningAttempt++
@@ -30,7 +31,7 @@ func (s *Subscription) HandleDunning(ctx workflow.Context) error {
 			// Recovered.
 			s.DunningAttempt = 0
 			s.transitionTo(ctx, PhaseActive)
-			_ = s.FireLifecycleHook(ctx, HookRecovered)
+			_ = s.FireLifecycleHook(ctx, hook.Recovered)
 			return nil
 		}
 		// Charge failed again — loop.

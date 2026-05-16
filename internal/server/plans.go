@@ -9,6 +9,7 @@ import (
 
 	subflowv1 "github.com/martavoi/subflow/api/v1"
 	"github.com/martavoi/subflow/internal/domain/plan"
+	"github.com/martavoi/subflow/internal/hook"
 	"github.com/martavoi/subflow/internal/store"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -92,9 +93,13 @@ func buildPlanFromRequest(req *subflowv1.CreatePlanRequest) (plan.Plan, error) {
 	if req.PerUserLimit < 0 {
 		return plan.Plan{}, fmt.Errorf("per_user_limit must be >= 0 (0 = unlimited)")
 	}
-	hooks, err := plan.ParseHookNames(req.EnabledHooks)
-	if err != nil {
-		return plan.Plan{}, err
+	hooks := make([]hook.Type, 0, len(req.EnabledHooks))
+	for _, raw := range req.EnabledHooks {
+		h, err := hook.Parse(raw)
+		if err != nil {
+			return plan.Plan{}, err
+		}
+		hooks = append(hooks, h)
 	}
 
 	currency := strings.ToUpper(req.Currency)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/martavoi/subflow/internal/activity"
 	"github.com/martavoi/subflow/internal/billing"
+	"github.com/martavoi/subflow/internal/hook"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -79,12 +80,12 @@ func (s *Subscription) Charge(ctx workflow.Context, purpose chargePurpose, dunni
 		s.LastChargeAmountCents = s.Plan.PriceCents
 		s.TotalChargedCents += s.Plan.PriceCents
 		s.SuccessfulChargeCount++
-		_ = s.FirePaymentHook(ctx, HookPaymentOK, dunningAttempt, chargeRes.TransactionID, "")
+		_ = s.FirePaymentHook(ctx, hook.PaymentOK, dunningAttempt, chargeRes.TransactionID, "")
 	} else {
 		s.LastFailureAt = now
 		s.LastFailureReason = chargeErr.Error()
 		s.FailedChargeCount++
-		_ = s.FirePaymentHook(ctx, HookPaymentFailed, dunningAttempt, "", chargeErr.Error())
+		_ = s.FirePaymentHook(ctx, hook.PaymentFailed, dunningAttempt, "", chargeErr.Error())
 	}
 
 	return chargeErr
