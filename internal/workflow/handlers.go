@@ -1,9 +1,6 @@
 package workflow
 
-import (
-	"github.com/martavoi/subflow/internal/domain/subscription"
-	"go.temporal.io/sdk/workflow"
-)
+import "go.temporal.io/sdk/workflow"
 
 // AsStatus is the query handler — returns the current entity snapshot.
 // Pure read; no mutation. Bound to s for use as a method-value handler.
@@ -28,18 +25,17 @@ func (s *Subscription) AsStatus() (Status, error) {
 	}, nil
 }
 
-// HandleCancelSignal flips the cancel flag. The main loop reads it on the
-// next selector wakeup. Phase doesn't transition here — that happens in
-// AwaitPeriodEndOrCancellation (or Trial).
-func (s *Subscription) HandleCancelSignal(_ workflow.Context, _ struct{}) {
+// OnCancel flips the cancel flag. The main loop reads it on the next selector
+// wakeup. Phase doesn't transition here — that happens in AwaitEnd (or Trial).
+func (s *Subscription) OnCancel(_ workflow.Context, _ struct{}) {
 	s.CancelRequested = true
 }
 
-// HandleContextUpdateSignal merges integrator-supplied context updates into
-// the subscription's mutable bag.
-func (s *Subscription) HandleContextUpdateSignal(_ workflow.Context, updates map[string]string) {
+// OnContextUpdate merges integrator-supplied context updates into the
+// subscription's mutable bag.
+func (s *Subscription) OnContextUpdate(_ workflow.Context, updates map[string]string) {
 	if s.Context == nil {
-		s.Context = subscription.Context{}
+		s.Context = Context{}
 	}
 	for k, v := range updates {
 		s.Context[k] = v
@@ -58,7 +54,7 @@ func (s *Subscription) registerHandlers(ctx workflow.Context) error {
 		for {
 			var v struct{}
 			ch.Receive(ctx, &v)
-			s.HandleCancelSignal(ctx, v)
+			s.OnCancel(ctx, v)
 		}
 	})
 	workflow.Go(ctx, func(ctx workflow.Context) {
@@ -66,7 +62,7 @@ func (s *Subscription) registerHandlers(ctx workflow.Context) error {
 		for {
 			var updates map[string]string
 			ch.Receive(ctx, &updates)
-			s.HandleContextUpdateSignal(ctx, updates)
+			s.OnContextUpdate(ctx, updates)
 		}
 	})
 	return nil
