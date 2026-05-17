@@ -79,12 +79,22 @@ func (s *Subscription) Charge(ctx workflow.Context, purpose chargePurpose, dunni
 		s.LastChargeAmountCents = s.Plan.PriceCents
 		s.TotalChargedCents += s.Plan.PriceCents
 		s.SuccessfulChargeCount++
-		_ = s.firePayment(ctx, hook.PaymentOK, dunningAttempt, chargeRes.TransactionID, "")
+		_ = s.emitPayment(ctx, hook.PaymentOK, hook.PaymentPayload{
+			DunningAttempt: dunningAttempt,
+			AmountCents:    s.Plan.PriceCents,
+			Currency:       s.Plan.Currency,
+			TransactionID:  chargeRes.TransactionID,
+		})
 	} else {
 		s.LastFailureAt = now
 		s.LastFailureReason = chargeErr.Error()
 		s.FailedChargeCount++
-		_ = s.firePayment(ctx, hook.PaymentFailed, dunningAttempt, "", chargeErr.Error())
+		_ = s.emitPayment(ctx, hook.PaymentFailed, hook.PaymentPayload{
+			DunningAttempt: dunningAttempt,
+			AmountCents:    s.Plan.PriceCents,
+			Currency:       s.Plan.Currency,
+			FailureReason:  chargeErr.Error(),
+		})
 	}
 
 	return chargeErr

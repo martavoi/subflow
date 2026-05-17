@@ -81,10 +81,10 @@ func registerMocks(env *testsuite.TestWorkflowEnvironment, rec *hookRecord, char
 	)
 
 	mockDispatch := func(in DispatchHook) error {
-		if in.Lifecycle != nil {
-			rec.lifecycle[string(in.Type)]++
-		} else if in.Payment != nil {
-			rec.payment[string(in.Type)]++
+		if _, ok := in.Event.Payload.(hook.LifecyclePayload); ok {
+			rec.lifecycle[string(in.Event.Type)]++
+		} else if _, ok := in.Event.Payload.(hook.PaymentPayload); ok {
+			rec.payment[string(in.Event.Type)]++
 		}
 		return nil
 	}

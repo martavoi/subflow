@@ -2,7 +2,7 @@ package workflow
 
 import (
 	"context"
-	"time"
+	"fmt"
 
 	subflowv1 "github.com/martavoi/subflow/api/v1"
 	"github.com/martavoi/subflow/internal/hook"
@@ -13,87 +13,67 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// DispatchHook is the single activity input for all hook dispatches.
+// DispatchHook is the activity input for delivering an integration event to
+// the integrator. Wraps the canonical hook.Event with delivery metadata
+// (Endpoint, EventID).
 type DispatchHook struct {
-	Endpoint       string
-	EventID        string
-	Type           hook.Type
-	SubscriptionID string
-	UserID         string
-	PlanCode       string
-	RenewalCount   int
-	EventTime      time.Time
-	Context        map[string]string
-
-	// Exactly one of these is populated based on hook category.
-	Lifecycle *LifecycleData
-	Payment   *PaymentData
-}
-
-// LifecycleData carries payload fields for lifecycle hooks (8 types).
-type LifecycleData struct {
-	Phase       string
-	PeriodStart time.Time
-	PeriodEnd   time.Time
-}
-
-// PaymentData carries payload fields for payment hooks (2 types).
-type PaymentData struct {
-	DunningAttempt int
-	AmountCents    int64
-	Currency       string
-	TransactionID  string
-	FailureReason  string
+	Event    hook.Event
+	Endpoint string
+	EventID  string // idempotency key
 }
 
 // HookDispatcher groups the hook dispatch activity. A single Dispatch method
-// replaces the 10 per-hook On* methods.
+// handles every payload variant via a type switch on Event.Payload.
 type HookDispatcher struct {
 	Client *integration.Client
 }
 
-// Dispatch is the single registered activity for all hook types. It builds a
-// proto Event with the appropriate oneof payload and calls the integration's
-// Dispatch rpc.
+// Dispatch is the single registered activity for all hook types. It builds
+// a proto Event with the appropriate oneof payload variant and calls the
+// integration's Dispatch rpc.
 func (h *HookDispatcher) Dispatch(ctx context.Context, in DispatchHook) error {
 	ev := &subflowv1.Event{
 		Id:             in.EventID,
-		Type:           string(in.Type),
-		CreatedAt:      timestamppb.New(in.EventTime),
-		Context:        in.Context,
-		SubscriptionId: in.SubscriptionID,
-		UserId:         in.UserID,
-		PlanCode:       in.PlanCode,
-		RenewalCount:   int32(in.RenewalCount),
+		Type:           string(in.Event.Type),
+		CreatedAt:      timestamppb.New(in.Event.OccurredAt),
+		Context:        in.Event.Context,
+		SubscriptionId: in.Event.SubscriptionID,
+		UserId:         in.Event.UserID,
+		PlanCode:       in.Event.PlanCode,
+		RenewalCount:   int32(in.Event.RenewalCount),
 	}
 
-	switch {
-	case in.Lifecycle != nil:
+	switch p := in.Event.Payload.(type) {
+	case hook.LifecyclePayload:
 		ev.Data = &subflowv1.Event_Lifecycle{
 			Lifecycle: &subflowv1.LifecycleData{
-				Phase:       in.Lifecycle.Phase,
-				PeriodStart: timestamppb.New(in.Lifecycle.PeriodStart),
-				PeriodEnd:   timestamppb.New(in.Lifecycle.PeriodEnd),
+				Phase:       p.Phase,
+				PeriodStart: timestamppb.New(p.PeriodStart),
+				PeriodEnd:   timestamppb.New(p.PeriodEnd),
 			},
 		}
-	case in.Payment != nil:
+	case hook.PaymentPayload:
 		ev.Data = &subflowv1.Event_Payment{
 			Payment: &subflowv1.PaymentData{
-				DunningAttempt: int32(in.Payment.DunningAttempt),
-				AmountCents:    in.Payment.AmountCents,
-				Currency:       in.Payment.Currency,
-				TransactionId:  in.Payment.TransactionID,
-				FailureReason:  in.Payment.FailureReason,
+				DunningAttempt: int32(p.DunningAttempt),
+				AmountCents:    p.AmountCents,
+				Currency:       p.Currency,
+				TransactionId:  p.TransactionID,
+				FailureReason:  p.FailureReason,
 			},
 		}
+	default:
+		return temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("DispatchHook: unknown payload type %T", in.Event.Payload),
+			ErrTypeHookTerminal, nil)
 	}
 
 	return mapHookError(h.Client.Dispatch(ctx, in.Endpoint, ev))
 }
 
 // mapHookError converts gRPC errors to Temporal application errors. Terminal
-// codes (FailedPrecondition / InvalidArgument / NotFound / Unimplemented) become
-// non-retryable HookTerminalError; everything else stays retryable.
+// codes become non-retryable HookTerminalError; everything else stays
+// retryable.
 func mapHookError(err error) error {
 	if err == nil {
 		return nil
