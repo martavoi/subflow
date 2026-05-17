@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/martavoi/subflow/internal/activity"
 	"github.com/martavoi/subflow/internal/billing"
 	"github.com/martavoi/subflow/internal/hook"
 	"go.temporal.io/sdk/workflow"
@@ -33,16 +32,16 @@ func (s *Subscription) Charge(ctx workflow.Context, purpose chargePurpose, dunni
 
 	chargeOpts := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
-		RetryPolicy:         activity.ChargePaymentRetry,
+		RetryPolicy:         ChargePaymentRetry,
 	})
-	chargeIn := activity.ChargePayment{
+	chargeIn := ChargePayment{
 		Reference:   ref,
 		UserID:      s.UserID,
 		PlanCode:    s.PlanCode,
 		AmountCents: s.Plan.PriceCents,
 		Currency:    s.Plan.Currency,
 	}
-	var chargeRes activity.ChargeResult
+	var chargeRes ChargeResult
 	chargeErr := workflow.ExecuteActivity(chargeOpts, "ChargePayment", chargeIn).Get(ctx, &chargeRes)
 
 	now := workflow.Now(ctx)
@@ -71,7 +70,7 @@ func (s *Subscription) Charge(ctx workflow.Context, purpose chargePurpose, dunni
 	}
 	billingOpts := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Second,
-		RetryPolicy:         activity.BillingEventRetry,
+		RetryPolicy:         BillingEventRetry,
 	})
 	_ = workflow.ExecuteActivity(billingOpts, "RecordBillingEvent", ev).Get(ctx, nil)
 

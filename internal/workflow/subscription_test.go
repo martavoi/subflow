@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	activityPkg "github.com/martavoi/subflow/internal/activity"
 	"github.com/martavoi/subflow/internal/billing"
 	"github.com/martavoi/subflow/internal/domain/plan"
 	"github.com/martavoi/subflow/internal/hook"
@@ -63,14 +62,14 @@ func newHookRecord() *hookRecord {
 func registerMocks(env *testsuite.TestWorkflowEnvironment, rec *hookRecord, chargeBehavior func(attempt int) error) {
 	chargeAttempts := 0
 	env.RegisterActivityWithOptions(
-		func(in activityPkg.ChargePayment) (activityPkg.ChargeResult, error) {
+		func(in ChargePayment) (ChargeResult, error) {
 			chargeAttempts++
 			if chargeBehavior != nil {
 				if err := chargeBehavior(chargeAttempts); err != nil {
-					return activityPkg.ChargeResult{}, err
+					return ChargeResult{}, err
 				}
 			}
-			return activityPkg.ChargeResult{
+			return ChargeResult{
 				Reference: in.Reference, TransactionID: "txn", AmountCents: in.AmountCents, Currency: in.Currency,
 			}, nil
 		},
@@ -81,7 +80,7 @@ func registerMocks(env *testsuite.TestWorkflowEnvironment, rec *hookRecord, char
 		activity.RegisterOptions{Name: "RecordBillingEvent"},
 	)
 
-	mockDispatch := func(in activityPkg.DispatchHook) error {
+	mockDispatch := func(in DispatchHook) error {
 		if in.Lifecycle != nil {
 			rec.lifecycle[string(in.Type)]++
 		} else if in.Payment != nil {

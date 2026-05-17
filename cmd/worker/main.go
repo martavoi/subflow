@@ -8,7 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/martavoi/subflow/internal/activity"
 	"github.com/martavoi/subflow/internal/billing"
 	"github.com/martavoi/subflow/internal/config"
 	"github.com/martavoi/subflow/internal/integration"
@@ -59,12 +58,12 @@ func main() {
 	intClient := integration.NewClient()
 	defer intClient.Close()
 
-	paymentActs := &activity.PaymentGateway{
+	paymentActs := &wfpkg.PaymentGateway{
 		TransientFailureRate: cfg.PaymentTransientRate,
 		TerminalFailureRate:  cfg.PaymentTerminalRate,
 	}
-	billingActs := &activity.BillingStore{Events: billingStore}
-	hookActs := &activity.HookDispatcher{Client: intClient}
+	billingActs := &wfpkg.BillingStore{Events: billingStore}
+	hookActs := &wfpkg.HookDispatcher{Client: intClient}
 
 	w := worker.New(tc, cfg.TaskQueue, worker.Options{})
 	w.RegisterWorkflow(wfpkg.SubscriptionWorkflow)

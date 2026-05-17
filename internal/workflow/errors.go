@@ -1,4 +1,4 @@
-package activity
+package workflow
 
 // Application error types used by activities. Names appear in RetryPolicy
 // NonRetryableErrorTypes lists, matched against ApplicationError.Type exactly.

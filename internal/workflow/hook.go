@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/martavoi/subflow/internal/activity"
 	"github.com/martavoi/subflow/internal/hook"
 	"go.temporal.io/sdk/workflow"
 )
@@ -25,7 +24,7 @@ func (s *Subscription) fireLifecycle(ctx workflow.Context, h hook.Type) error {
 	if s.Plan.IntegrationEndpoint == "" || !isEnabled(h, s.Plan.EnabledHooks) {
 		return nil
 	}
-	in := activity.DispatchHook{
+	in := DispatchHook{
 		Endpoint:       s.Plan.IntegrationEndpoint,
 		EventID:        s.idempotencyKey("hook:" + string(h)),
 		Type:           h,
@@ -35,7 +34,7 @@ func (s *Subscription) fireLifecycle(ctx workflow.Context, h hook.Type) error {
 		RenewalCount:   s.RenewalCount,
 		EventTime:      workflow.Now(ctx),
 		Context:        map[string]string(s.Context),
-		Lifecycle: &activity.LifecycleData{
+		Lifecycle: &LifecycleData{
 			Phase:       string(s.Phase),
 			PeriodStart: s.Period.Start,
 			PeriodEnd:   s.Period.End,
@@ -43,7 +42,7 @@ func (s *Subscription) fireLifecycle(ctx workflow.Context, h hook.Type) error {
 	}
 	opts := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
-		RetryPolicy:         activity.HookRetry,
+		RetryPolicy:         HookRetry,
 	})
 	return workflow.ExecuteActivity(opts, "DispatchHook", in).Get(ctx, nil)
 }
@@ -54,7 +53,7 @@ func (s *Subscription) firePayment(ctx workflow.Context, h hook.Type, dunningAtt
 	if s.Plan.IntegrationEndpoint == "" || !isEnabled(h, s.Plan.EnabledHooks) {
 		return nil
 	}
-	in := activity.DispatchHook{
+	in := DispatchHook{
 		Endpoint:       s.Plan.IntegrationEndpoint,
 		EventID:        s.idempotencyKey(fmt.Sprintf("hook:%s:%d", string(h), dunningAttempt)),
 		Type:           h,
@@ -64,7 +63,7 @@ func (s *Subscription) firePayment(ctx workflow.Context, h hook.Type, dunningAtt
 		RenewalCount:   s.RenewalCount,
 		EventTime:      workflow.Now(ctx),
 		Context:        map[string]string(s.Context),
-		Payment: &activity.PaymentData{
+		Payment: &PaymentData{
 			DunningAttempt: dunningAttempt,
 			AmountCents:    s.Plan.PriceCents,
 			Currency:       s.Plan.Currency,
@@ -74,7 +73,7 @@ func (s *Subscription) firePayment(ctx workflow.Context, h hook.Type, dunningAtt
 	}
 	opts := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
-		RetryPolicy:         activity.HookRetry,
+		RetryPolicy:         HookRetry,
 	})
 	return workflow.ExecuteActivity(opts, "DispatchHook", in).Get(ctx, nil)
 }
