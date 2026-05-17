@@ -2,10 +2,11 @@ package workflow
 
 import "go.temporal.io/sdk/workflow"
 
-// AsStatus is the query handler — returns the current entity snapshot.
-// Pure read; no mutation. Bound to s for use as a method-value handler.
-func (s *Subscription) AsStatus() (Status, error) {
-	return Status{
+// View is the query handler — returns the current entity snapshot for API
+// rendering. Pure read; no mutation. Bound to s for use as a method-value
+// handler.
+func (s *Subscription) View() (View, error) {
+	return View{
 		UserID:                s.UserID,
 		PlanCode:              s.PlanCode,
 		Phase:                 string(s.Phase),
@@ -46,7 +47,7 @@ func (s *Subscription) OnContextUpdate(_ workflow.Context, updates map[string]st
 // handler is registered separately inside AwaitActivation (T17) because it's
 // only valid on the first paid period.
 func (s *Subscription) registerHandlers(ctx workflow.Context) error {
-	if err := workflow.SetQueryHandler(ctx, QuerySubscriptionStatus, s.AsStatus); err != nil {
+	if err := workflow.SetQueryHandler(ctx, QuerySubscriptionView, s.View); err != nil {
 		return err
 	}
 	workflow.Go(ctx, func(ctx workflow.Context) {

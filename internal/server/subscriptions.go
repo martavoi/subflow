@@ -144,15 +144,15 @@ func (s *SubscriptionService) UpdateSubscriptionContext(ctx context.Context, req
 }
 
 func (s *SubscriptionService) GetSubscription(ctx context.Context, req *subflowv1.GetSubscriptionRequest) (*subflowv1.Subscription, error) {
-	res, err := s.Temporal.QueryWorkflow(ctx, "subscription:"+req.Id, "", workflow.QuerySubscriptionStatus)
+	res, err := s.Temporal.QueryWorkflow(ctx, "subscription:"+req.Id, "", workflow.QuerySubscriptionView)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "subscription not found: %v", err)
 	}
-	var st workflow.Status
-	if err := res.Get(&st); err != nil {
-		return nil, status.Errorf(codes.Internal, "decode status: %v", err)
+	var v workflow.View
+	if err := res.Get(&v); err != nil {
+		return nil, status.Errorf(codes.Internal, "decode view: %v", err)
 	}
-	return statusToProto(req.Id, st), nil
+	return viewToProto(req.Id, v), nil
 }
 
 func (s *SubscriptionService) ListSubscriptions(ctx context.Context, req *subflowv1.ListSubscriptionsRequest) (*subflowv1.ListSubscriptionsResponse, error) {
@@ -222,24 +222,24 @@ func buildListQuery(req *subflowv1.ListSubscriptionsRequest) string {
 	return strings.Join(parts, " AND ")
 }
 
-func statusToProto(id string, st workflow.Status) *subflowv1.Subscription {
+func viewToProto(id string, v workflow.View) *subflowv1.Subscription {
 	return &subflowv1.Subscription{
 		Id:                    id,
-		UserId:                st.UserID,
-		PlanCode:              st.PlanCode,
-		Phase:                 st.Phase,
-		PeriodStart:           timestamppb.New(st.PeriodStart),
-		PeriodEnd:             timestamppb.New(st.PeriodEnd),
-		RenewalCount:          int32(st.RenewalCount),
-		Context:               map[string]string(st.Context),
-		CancelRequested:       st.CancelRequested,
-		DunningAttempt:        int32(st.DunningAttempt),
-		LastChargedAt:         timestamppb.New(st.LastChargedAt),
-		LastChargeAmountCents: st.LastChargeAmountCents,
-		LastFailureAt:         timestamppb.New(st.LastFailureAt),
-		LastFailureReason:     st.LastFailureReason,
-		TotalChargedCents:     st.TotalChargedCents,
-		SuccessfulChargeCount: int32(st.SuccessfulChargeCount),
-		FailedChargeCount:     int32(st.FailedChargeCount),
+		UserId:                v.UserID,
+		PlanCode:              v.PlanCode,
+		Phase:                 v.Phase,
+		PeriodStart:           timestamppb.New(v.PeriodStart),
+		PeriodEnd:             timestamppb.New(v.PeriodEnd),
+		RenewalCount:          int32(v.RenewalCount),
+		Context:               map[string]string(v.Context),
+		CancelRequested:       v.CancelRequested,
+		DunningAttempt:        int32(v.DunningAttempt),
+		LastChargedAt:         timestamppb.New(v.LastChargedAt),
+		LastChargeAmountCents: v.LastChargeAmountCents,
+		LastFailureAt:         timestamppb.New(v.LastFailureAt),
+		LastFailureReason:     v.LastFailureReason,
+		TotalChargedCents:     v.TotalChargedCents,
+		SuccessfulChargeCount: int32(v.SuccessfulChargeCount),
+		FailedChargeCount:     int32(v.FailedChargeCount),
 	}
 }

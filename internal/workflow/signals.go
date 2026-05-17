@@ -4,6 +4,6 @@ package workflow
 const (
 	SignalCancelSubscription = "subscription.cancel"
 	SignalUpdateContext      = "subscription.update_context"
-	QuerySubscriptionStatus  = "subscription.status"
+	QuerySubscriptionView    = "subscription.view"
 	UpdateActivate           = "subscription.activate"
 )

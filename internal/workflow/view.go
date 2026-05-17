@@ -2,8 +2,10 @@ package workflow
 
 import "time"
 
-// Status is the snapshot returned by the QuerySubscriptionStatus query.
-type Status struct {
+// View is the read-model snapshot returned by the QuerySubscriptionView query.
+// Distinct from Phase (lifecycle state); this carries period boundaries,
+// counters, and the integrator-mutable Context for API rendering.
+type View struct {
 	UserID                string
 	PlanCode              string
 	Phase                 string

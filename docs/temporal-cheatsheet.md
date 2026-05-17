@@ -10,7 +10,7 @@
 | End of period | `workflow.NewContinueAsNewError` | `internal/workflow/continuation.go` |
 | Cancel | Signal `subscription.cancel` | `SignalCancelSubscription` constant |
 | Update context | Signal `subscription.update_context` | `SignalUpdateContext` constant |
-| Status read | Query `subscription.status` | `internal/workflow/handlers.go` AsStatus |
+| View read | Query `subscription.view` | `internal/workflow/handlers.go` View |
 | List/filter subscriptions | `client.ListWorkflow` + custom search attributes | `internal/server/subscriptions.go` |
 | Per-user limit | `client.CountWorkflow` | `internal/server/subscriptions.go` countActiveForUser |
 | Charge | Activity `ChargePayment` with retry policy | `internal/activity/payment.go` |
@@ -71,7 +71,7 @@ SubflowPhase='trialing' AND SubflowTrialEnd < '2026-05-13T00:00:00Z'
 
 1. **Open a subscription workflow** (search by `WorkflowId STARTS_WITH 'subscription:'`). Watch each CAN run appear as a discrete row in the execution chain.
 2. **Check pending activities** when `mock-integration` is down (`task break-integration`) — hooks accumulate retries with exponential backoff.
-3. **Send a query from the UI**: Workflow → Query → `subscription.status`. Returns the live snapshot.
+3. **Send a query from the UI**: Workflow → Query → `subscription.view`. Returns the live snapshot.
 4. **Send a signal from the UI**: Workflow → Send Signal → `subscription.cancel`. Watch the workflow honor end-of-period.
 5. **Run `temporal operator search-attribute list`** to confirm `SubflowUserId/PlanCode/Phase/PeriodEnd/TrialEnd` are registered.
 
