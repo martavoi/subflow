@@ -13,10 +13,10 @@
 | View read | Query `subscription.view` | `internal/workflow/handlers.go` View |
 | List/filter subscriptions | `client.ListWorkflow` + custom search attributes | `internal/server/subscriptions.go` |
 | Per-user limit | `client.CountWorkflow` | `internal/server/subscriptions.go` countActiveForUser |
-| Charge | Activity `ChargePayment` with retry policy | `internal/activity/payment.go` |
-| Billing history | Activity `RecordBillingEvent` writing to `billing_events` | `internal/activity/billing.go` + `internal/billing/mongo_store.go` |
-| Lifecycle hooks | 1 activity (`DispatchHook`) dispatching to a single `Dispatch` rpc on the integration | `internal/activity/hooks.go` |
-| Renewal-upcoming notice | `workflow.AwaitWithTimeout` phase-1 timer at `Period.End - RenewalUpcomingBefore` | `internal/workflow/phases.go` `AwaitEnd` |
+| Charge | Activity `ChargePayment` with retry policy | `internal/workflow/activity_payment.go` |
+| Billing history | Activity `RecordBillingEvent` writing to `billing_events` | `internal/workflow/activity_billing.go` + `internal/billing/mongo_store.go` |
+| Lifecycle hooks | 1 activity (`DispatchHook`) dispatching to a single `Dispatch` rpc on the integration | `internal/workflow/activity_hook.go` |
+| Renewal-upcoming notice | `workflow.AwaitWithTimeout` phase-1 timer at `Period.End - RenewalUpcomingBefore` | `internal/workflow/phase_await_end.go` `AwaitEnd` |
 | Dunning loop | `workflow.Sleep` + `workflow.UpsertSearchAttributes` | `internal/workflow/dunning.go` |
 | Idempotency token | `<workflowID>:<runID>:<purpose>` | `(*Subscription).idempotencyKey` |
 
