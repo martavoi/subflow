@@ -76,7 +76,7 @@ billingActs := &workflow.BillingStore{Events: billingStore}
 hookActs    := &workflow.HookDispatcher{Client: intClient}
 ```
 
-Activity registration names stay the same: `"ChargePayment"`, `"RecordBillingEvent"`, `"DispatchHook"`. No history-incompatible changes.
+Activity registration names: `"ChargePayment"`, `"RecordBillingEvent"`, `"DispatchHook"`. These are verb-noun and read well; no renaming proposed.
 
 ### D4. One `emit` replacing `fireLifecycle` + `firePayment`
 
@@ -189,7 +189,7 @@ input_test.go
 After the refactor:
 - `go build ./...` passes.
 - `go test ./...` passes (existing tests adapted for renamed types).
-- Worker starts; `SubscriptionWorkflow`, `ChargePayment`, `RecordBillingEvent`, `DispatchHook` register under the same names as before — no in-flight workflows break.
+- Worker starts; activities (`ChargePayment`, `RecordBillingEvent`, `DispatchHook`) and the workflow (`SubscriptionWorkflow`) register without error.
 - Manual: query a running subscription via the API; `subscription.view` returns the same shape `subscription.status` did (modulo the type name).
 - `internal/activity/` directory does not exist.
 - `grep -r "plan.Snapshot" internal/` returns nothing.
