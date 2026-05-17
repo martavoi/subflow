@@ -47,8 +47,8 @@ type Subscription struct {
 	// charges and hooks — independent of Temporal exec/run IDs.
 	IntervalID string
 
-	// Plan snapshot — immutable for this run
-	Plan plan.Snapshot
+	// Plan — carried immutably for this run
+	Plan plan.Plan
 
 	// Lifecycle state
 	Phase           Phase

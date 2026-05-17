@@ -8,7 +8,6 @@ import (
 	"time"
 
 	subflowv1 "github.com/martavoi/subflow/api/v1"
-	"github.com/martavoi/subflow/internal/domain/plan"
 	"github.com/martavoi/subflow/internal/store"
 	subflowtemporal "github.com/martavoi/subflow/internal/temporal"
 	"github.com/martavoi/subflow/internal/workflow"
@@ -64,7 +63,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, req *subfl
 		IntervalID:     uuid.NewString(),
 		UserID:         req.UserId,
 		PlanID:         p.ID,
-		Plan:           plan.SnapshotOf(p),
+		Plan:           p,
 		PeriodStart:    now,
 		PeriodEnd:      periodEnd,
 		Context:        workflow.Context(req.InitialContext),

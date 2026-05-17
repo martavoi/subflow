@@ -18,7 +18,7 @@ type SubscriptionInput struct {
 	IntervalID      string
 	UserID          string
 	PlanID          string
-	Plan            plan.Snapshot
+	Plan            plan.Plan
 	PeriodStart     time.Time
 	PeriodEnd       time.Time
 	Context         Context

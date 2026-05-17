@@ -16,9 +16,9 @@ import (
 // sampleInput builds a SubscriptionInput with all 11 hooks enabled so test
 // observers can count fire counts. Period anchored at time.Now to play nicely
 // with the test harness mock clock.
-func sampleInput(mods ...func(*plan.Snapshot)) SubscriptionInput {
+func sampleInput(mods ...func(*plan.Plan)) SubscriptionInput {
 	start := time.Now().UTC().Truncate(time.Second)
-	p := plan.Snapshot{
+	p := plan.Plan{
 		Code:                "monthly-basic",
 		Cadence:             30 * 24 * time.Hour,
 		PriceCents:          999,
@@ -126,7 +126,7 @@ func TestSubscription_TrialThenActivate(t *testing.T) {
 	rec := newHookRecord()
 	registerMocks(env, rec, nil)
 
-	input := sampleInput(func(p *plan.Snapshot) {
+	input := sampleInput(func(p *plan.Plan) {
 		p.TrialDuration = 24 * time.Hour
 		p.TrialEndNoticeBefore = 2 * time.Hour
 	})
@@ -158,7 +158,7 @@ func TestSubscription_TrialCanceled(t *testing.T) {
 	rec := newHookRecord()
 	registerMocks(env, rec, nil)
 
-	input := sampleInput(func(p *plan.Snapshot) {
+	input := sampleInput(func(p *plan.Plan) {
 		p.TrialDuration = 24 * time.Hour
 	})
 	input.PeriodEnd = input.PeriodStart.Add(input.Plan.TrialDuration)
@@ -197,7 +197,7 @@ func TestSubscription_RenewalDunningRecovery(t *testing.T) {
 		return nil
 	})
 
-	input := sampleInput(func(p *plan.Snapshot) {
+	input := sampleInput(func(p *plan.Plan) {
 		p.DunningMaxAttempts = 3
 		p.DunningRetryBackoff = 1 * time.Hour
 	})
@@ -227,7 +227,7 @@ func TestSubscription_RenewalDunningExhausted(t *testing.T) {
 		return temporal.NewNonRetryableApplicationError("transient first try", "TestTransientNonRetryable", nil)
 	})
 
-	input := sampleInput(func(p *plan.Snapshot) {
+	input := sampleInput(func(p *plan.Plan) {
 		p.DunningMaxAttempts = 2
 		p.DunningRetryBackoff = 1 * time.Hour
 	})
@@ -254,7 +254,7 @@ func TestRenewalUpcoming_FiresOnRenewalPeriod(t *testing.T) {
 
 	// Renewal period: RenewalCount=1 so Run() goes directly to Renew → AwaitEnd.
 	// Cadence=30s, RenewalUpcomingBefore=5s → notice fires at PeriodEnd-5s.
-	input := sampleInput(func(p *plan.Snapshot) {
+	input := sampleInput(func(p *plan.Plan) {
 		p.Cadence = 30 * time.Second
 		p.RenewalUpcomingBefore = 5 * time.Second
 	})
@@ -282,7 +282,7 @@ func TestRenewalUpcoming_FiresOnFirstPaidPeriod(t *testing.T) {
 
 	// No-trial plan: RenewalCount=0, Activate update triggers first charge,
 	// then AwaitEnd runs with RenewalUpcomingBefore set.
-	input := sampleInput(func(p *plan.Snapshot) {
+	input := sampleInput(func(p *plan.Plan) {
 		p.Cadence = 30 * time.Second
 		p.RenewalUpcomingBefore = 5 * time.Second
 	})
@@ -311,7 +311,7 @@ func TestRenewalUpcoming_DoesNotFireWhenZero(t *testing.T) {
 	rec := newHookRecord()
 	registerMocks(env, rec, nil)
 
-	input := sampleInput(func(p *plan.Snapshot) {
+	input := sampleInput(func(p *plan.Plan) {
 		p.Cadence = 30 * time.Second
 		// RenewalUpcomingBefore is zero (default) — no hook should fire.
 	})
@@ -338,7 +338,7 @@ func TestRenewalUpcoming_DoesNotFireWhenCanceledBeforeNotice(t *testing.T) {
 
 	// Cadence=30s, notice at PeriodEnd-5s = t+25s.
 	// Cancel arrives at t+10s — before the notice at t+25s.
-	input := sampleInput(func(p *plan.Snapshot) {
+	input := sampleInput(func(p *plan.Plan) {
 		p.Cadence = 30 * time.Second
 		p.RenewalUpcomingBefore = 5 * time.Second
 	})

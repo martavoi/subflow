@@ -13,7 +13,7 @@ func sample() SubscriptionInput {
 		SubscriptionID: "sub-1",
 		UserID:         "user-1",
 		PlanID:         "plan-1",
-		Plan: plan.Snapshot{
+		Plan: plan.Plan{
 			Code:    "monthly",
 			Cadence: 30 * 24 * time.Hour,
 		},
