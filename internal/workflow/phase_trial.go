@@ -21,14 +21,22 @@ const (
 // Semantics:
 //   - trial-end timer wins → returns trialOutcomeEnded
 //   - cancel signal wins (CancelRequested flag set) → returns trialOutcomeCanceled
-//     even if some time remains on the trial (trial cancels are immediate;
-//     end-of-period semantics apply only to paid periods)
+//     immediately, even if time remains on the trial (trial cancels are
+//     immediate; end-of-period semantics apply only to paid periods)
+//
+// Implementation: sequential AwaitWithTimeout waits, each racing the period
+// timer against the cancel flag. The notice and end events are strictly
+// ordered (notice precedes end), so no selector is needed.
 func (s *Subscription) Trial(ctx workflow.Context) (trialOutcome, error) {
 	s.transitionTo(ctx, PhaseTrialing)
 	_ = workflow.UpsertTypedSearchAttributes(ctx,
 		subflowtemporal.KeyTrialEnd.ValueSet(s.Period.End),
 	)
 	_ = s.emitLifecycle(ctx, hook.TrialStarted)
+
+	if s.CancelRequested {
+		return trialOutcomeCanceled, nil
+	}
 
 	now := workflow.Now(ctx)
 	if !s.Period.End.After(now) {
@@ -37,42 +45,26 @@ func (s *Subscription) Trial(ctx workflow.Context) (trialOutcome, error) {
 		return trialOutcomeEnded, nil
 	}
 
-	// Optional advance-notice timer. If TrialEndNoticeBefore > 0 and the
-	// notice time is in the future, schedule a notice timer alongside the
-	// end timer; fire the notice hook when it elapses.
-	var noticeFut workflow.Future
+	// Phase 1: optional trial-end notice. Cancel during the wait short-circuits.
 	if s.Plan.TrialEndNoticeBefore > 0 {
 		noticeAt := s.Period.End.Add(-s.Plan.TrialEndNoticeBefore)
 		if noticeAt.After(now) {
-			noticeFut = workflow.NewTimer(ctx, noticeAt.Sub(now))
-		}
-	}
-	endFut := workflow.NewTimer(ctx, s.Period.End.Sub(now))
-
-	noticeFired := noticeFut == nil // skip if not configured
-	ended := false
-
-	for !ended && !s.CancelRequested {
-		sel := workflow.NewSelector(ctx)
-		if !noticeFired && noticeFut != nil {
-			sel.AddFuture(noticeFut, func(workflow.Future) {
-				noticeFired = true
+			cancelled, _ := workflow.AwaitWithTimeout(ctx, noticeAt.Sub(now), func() bool {
+				return s.CancelRequested
 			})
-		}
-		sel.AddFuture(endFut, func(workflow.Future) {
-			ended = true
-		})
-		sel.Select(ctx)
-
-		// If the notice just fired, dispatch the hook then loop again to wait
-		// for the end timer (or cancel).
-		if noticeFired && !ended && !s.CancelRequested {
-			// dispatch only once; the predicate above prevents re-add to selector
+			if cancelled {
+				return trialOutcomeCanceled, nil
+			}
 			_ = s.emitLifecycle(ctx, hook.TrialWillEnd)
 		}
 	}
 
-	if s.CancelRequested {
+	// Phase 2: wait until trial end or cancel.
+	now = workflow.Now(ctx)
+	cancelled, _ := workflow.AwaitWithTimeout(ctx, s.Period.End.Sub(now), func() bool {
+		return s.CancelRequested
+	})
+	if cancelled {
 		return trialOutcomeCanceled, nil
 	}
 	return trialOutcomeEnded, nil

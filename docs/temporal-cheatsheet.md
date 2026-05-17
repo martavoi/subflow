@@ -16,7 +16,7 @@
 | Charge | Activity `ChargePayment` with retry policy | `internal/workflow/activity_payment.go` |
 | Billing history | Activity `RecordBillingEvent` writing to `billing_events` | `internal/workflow/activity_billing.go` + `internal/billing/mongo_store.go` |
 | Lifecycle hooks | 1 activity (`DispatchHook`) dispatching to a single `Dispatch` rpc on the integration | `internal/workflow/activity_hook.go` |
-| Renewal-upcoming notice | `workflow.AwaitWithTimeout` phase-1 timer at `Period.End - RenewalUpcomingBefore` | `internal/workflow/phase_await_end.go` `AwaitEnd` |
+| Renewal-upcoming notice | `workflow.AwaitWithTimeout` phase-1 timer at `Period.End - RenewalUpcomingBefore` | `internal/workflow/subscription.go` `Run` |
 | Dunning loop | `workflow.Sleep` + `workflow.UpsertSearchAttributes` | `internal/workflow/dunning.go` |
 | Idempotency token | `<workflowID>:<runID>:<purpose>` | `(*Subscription).idempotencyKey` |
 

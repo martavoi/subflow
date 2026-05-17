@@ -26,8 +26,8 @@ func (s *Subscription) View() (View, error) {
 	}, nil
 }
 
-// OnCancel flips the cancel flag. The main loop reads it on the next selector
-// wakeup. Phase doesn't transition here — that happens in AwaitEnd (or Trial).
+// OnCancel flips the cancel flag. The phase logic in Run (or Trial) reads it
+// on the next wait wakeup; the actual phase transition happens there.
 func (s *Subscription) OnCancel(_ workflow.Context, _ struct{}) {
 	s.CancelRequested = true
 }

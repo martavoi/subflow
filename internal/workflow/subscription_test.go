@@ -251,7 +251,7 @@ func TestRenewalUpcoming_FiresOnRenewalPeriod(t *testing.T) {
 	rec := newHookRecord()
 	registerMocks(env, rec, nil)
 
-	// Renewal period: RenewalCount=1 so Run() goes directly to Renew → AwaitEnd.
+	// Renewal period: RenewalCount=1 so Run() goes directly to Renew → period wait.
 	// Cadence=30s, RenewalUpcomingBefore=5s → notice fires at PeriodEnd-5s.
 	input := sampleInput(func(p *plan.Plan) {
 		p.Cadence = 30 * time.Second
@@ -280,7 +280,7 @@ func TestRenewalUpcoming_FiresOnFirstPaidPeriod(t *testing.T) {
 	registerMocks(env, rec, nil)
 
 	// No-trial plan: RenewalCount=0, Activate update triggers first charge,
-	// then AwaitEnd runs with RenewalUpcomingBefore set.
+	// then Run's period wait runs with RenewalUpcomingBefore set.
 	input := sampleInput(func(p *plan.Plan) {
 		p.Cadence = 30 * time.Second
 		p.RenewalUpcomingBefore = 5 * time.Second

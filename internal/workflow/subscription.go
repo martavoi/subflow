@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/martavoi/subflow/internal/domain/plan"
+	"github.com/martavoi/subflow/internal/hook"
 	subflowtemporal "github.com/martavoi/subflow/internal/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -128,7 +129,39 @@ func (s *Subscription) Run(ctx workflow.Context) error {
 		}
 	}
 
-	if cancelled := s.AwaitEnd(ctx); cancelled {
+	// Wait for period end or cancel. End-of-period semantics: cancel during
+	// the paid period stays active until the period naturally ends, then
+	// deactivates. Optional RenewalUpcomingBefore fires a notice hook ahead
+	// of period end.
+	if !s.CancelRequested {
+		now := workflow.Now(ctx)
+		if s.Period.End.After(now) {
+			if s.Plan.RenewalUpcomingBefore > 0 {
+				noticeAt := s.Period.End.Add(-s.Plan.RenewalUpcomingBefore)
+				if noticeAt.After(now) {
+					cancelDuringNotice, _ := workflow.AwaitWithTimeout(ctx, noticeAt.Sub(now), func() bool {
+						return s.CancelRequested
+					})
+					if !cancelDuringNotice {
+						_ = s.emitLifecycle(ctx, hook.RenewalUpcoming)
+					}
+				}
+			}
+			if !s.CancelRequested {
+				now = workflow.Now(ctx)
+				_, _ = workflow.AwaitWithTimeout(ctx, s.Period.End.Sub(now), func() bool {
+					return s.CancelRequested
+				})
+			}
+		}
+	}
+
+	if s.CancelRequested {
+		s.transitionTo(ctx, PhaseCanceled)
+		_ = s.emitLifecycle(ctx, hook.Canceled)
+		if remaining := s.Period.End.Sub(workflow.Now(ctx)); remaining > 0 {
+			_ = workflow.Sleep(ctx, remaining)
+		}
 		return s.Deactivate(ctx)
 	}
 	return s.NextPeriod(ctx)
