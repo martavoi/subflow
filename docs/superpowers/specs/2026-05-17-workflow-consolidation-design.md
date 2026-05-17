@@ -20,10 +20,10 @@ In scope:
 - Rename `workflow.Status` → `workflow.View` (type, query name, handler method).
 - Drop `plan.Snapshot` and `plan.SnapshotOf`. Workflow input carries full `plan.Plan`.
 - Fold `internal/activity` into `internal/workflow`. Delete `internal/activity`.
-- Collapse `fireLifecycle` + `firePayment` into one `(*Subscription).emit(ctx, hook.Type, *paymentArgs)`.
+- Introduce `hook.Event` as the integration-event contract with a sealed `hook.Payload` interface (`LifecyclePayload`, `PaymentPayload`). Replace `fireLifecycle`/`firePayment` with `emitLifecycle`/`emitPayment` + an internal `dispatch` helper.
 - Split `workflow/phases.go` into one file per phase method.
-- Three ADRs documenting the decisions.
-- CONTEXT.md addition noting `View` as the read-model.
+- Four ADRs documenting the decisions (0004 View, 0005 drop Snapshot, 0006 fold activity package, 0007 integration-event contract).
+- CONTEXT.md addition noting `View` as the read-model and clarifying that Hook events are **integration events**, not domain events in the DDD sense.
 
 Out of scope:
 - No proto/gRPC changes.
@@ -78,45 +78,117 @@ hookActs    := &workflow.HookDispatcher{Client: intClient}
 
 Activity registration names: `"ChargePayment"`, `"RecordBillingEvent"`, `"DispatchHook"`. These are verb-noun and read well; no renaming proposed.
 
-### D4. One `emit` replacing `fireLifecycle` + `firePayment`
+### D4. Integration-event contract: `hook.Event` with sealed payload
+
+The previous `fireLifecycle` / `firePayment` split mixed two concerns: (a) the per-payload-category data shape, and (b) the dispatch boilerplate. Split them. Introduce a canonical `hook.Event` type. Use a sealed-interface `hook.Payload` for category variance — no nullable parameters, compile-time enforcement that every event carries a typed payload.
+
+**New file `internal/hook/event.go`:**
 
 ```go
-type paymentArgs struct {
+package hook
+
+import "time"
+
+// Event is the canonical integration-event payload published to integrators.
+// It is an integration event (DDD-speak) — published outward, never used to
+// drive internal subscription state. See ADR 0002.
+type Event struct {
+    Type           Type
+    SubscriptionID string
+    UserID         string
+    PlanCode       string
+    RenewalCount   int
+    OccurredAt     time.Time
+    Context        map[string]string
+    Payload        Payload   // sealed; required.
+}
+
+// Payload is the category-specific variant carried on an Event. The interface
+// is sealed via the private isPayload marker — only payload types declared
+// in this package can satisfy it. New categories add a struct + isPayload.
+type Payload interface{ isPayload() }
+
+type LifecyclePayload struct {
+    Phase       string
+    PeriodStart time.Time
+    PeriodEnd   time.Time
+}
+func (LifecyclePayload) isPayload() {}
+
+type PaymentPayload struct {
     DunningAttempt int
+    AmountCents    int64
+    Currency       string
     TransactionID  string
     FailureReason  string
 }
+func (PaymentPayload) isPayload() {}
+```
 
-func (s *Subscription) emit(ctx workflow.Context, h hook.Type, p *paymentArgs) error {
-    if s.Plan.IntegrationEndpoint == "" || !isEnabled(h, s.Plan.EnabledHooks) {
-        return nil
-    }
-    in := DispatchHook{
-        Endpoint:       s.Plan.IntegrationEndpoint,
-        Type:           h,
-        SubscriptionID: s.SubscriptionID,
-        UserID:         s.UserID,
-        PlanCode:       s.PlanCode,
-        RenewalCount:   s.RenewalCount,
-        EventTime:      workflow.Now(ctx),
-        Context:        map[string]string(s.Context),
-    }
-    if p == nil {
-        in.EventID = s.idempotencyKey("hook:" + string(h))
-        in.Lifecycle = &LifecycleData{
+The previous `workflow.LifecycleData` and `workflow.PaymentData` types are deleted; their fields move to `hook.LifecyclePayload` / `hook.PaymentPayload`.
+
+**Activity input `workflow.DispatchHook` wraps the canonical event with delivery metadata:**
+
+```go
+type DispatchHook struct {
+    Event    hook.Event
+    Endpoint string
+    EventID  string   // idempotency key
+}
+```
+
+The `HookDispatcher.Dispatch` activity does a type switch on `in.Event.Payload` to populate the proto `Event` oneof:
+
+```go
+switch p := in.Event.Payload.(type) {
+case hook.LifecyclePayload:
+    ev.Data = &subflowv1.Event_Lifecycle{Lifecycle: &subflowv1.LifecycleData{...}}
+case hook.PaymentPayload:
+    ev.Data = &subflowv1.Event_Payment{Payment: &subflowv1.PaymentData{...}}
+}
+```
+
+**Workflow surface: two typed emit methods + one internal dispatch helper.** Lifecycle data is entirely subscription-derived (no extra args); payment data is call-site supplied (required).
+
+```go
+// workflow/hook.go
+
+// emitLifecycle fires a lifecycle hook. All payload data comes from current
+// subscription state.
+func (s *Subscription) emitLifecycle(ctx workflow.Context, t hook.Type) error {
+    return s.dispatch(ctx, hook.Event{
+        Type: t,
+        Payload: hook.LifecyclePayload{
             Phase:       string(s.Phase),
             PeriodStart: s.Period.Start,
             PeriodEnd:   s.Period.End,
-        }
-    } else {
-        in.EventID = s.idempotencyKey(fmt.Sprintf("hook:%s:%d", h, p.DunningAttempt))
-        in.Payment = &PaymentData{
-            DunningAttempt: p.DunningAttempt,
-            AmountCents:    s.Plan.PriceCents,
-            Currency:       s.Plan.Currency,
-            TransactionID:  p.TransactionID,
-            FailureReason:  p.FailureReason,
-        }
+        },
+    })
+}
+
+// emitPayment fires a payment hook. Caller supplies the full payload — no
+// magic fill-in. Amount/currency come from the plan at the call site.
+func (s *Subscription) emitPayment(ctx workflow.Context, t hook.Type, p hook.PaymentPayload) error {
+    return s.dispatch(ctx, hook.Event{Type: t, Payload: p})
+}
+
+// dispatch is the internal common-path: plan gating, common-field fill-in,
+// idempotency key, activity invocation.
+func (s *Subscription) dispatch(ctx workflow.Context, e hook.Event) error {
+    if s.Plan.IntegrationEndpoint == "" || !isEnabled(e.Type, s.Plan.EnabledHooks) {
+        return nil
+    }
+    e.SubscriptionID = s.SubscriptionID
+    e.UserID         = s.UserID
+    e.PlanCode       = s.PlanCode
+    e.RenewalCount   = s.RenewalCount
+    e.OccurredAt     = workflow.Now(ctx)
+    e.Context        = map[string]string(s.Context)
+
+    in := DispatchHook{
+        Event:    e,
+        Endpoint: s.Plan.IntegrationEndpoint,
+        EventID:  s.hookID(e),
     }
     opts := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
         StartToCloseTimeout: 30 * time.Second,
@@ -124,13 +196,37 @@ func (s *Subscription) emit(ctx workflow.Context, h hook.Type, p *paymentArgs) e
     })
     return workflow.ExecuteActivity(opts, "DispatchHook", in).Get(ctx, nil)
 }
+
+// hookID derives the idempotency key based on payload type. Payment payloads
+// include DunningAttempt so retries on the same hook type across dunning
+// attempts get distinct event IDs.
+func (s *Subscription) hookID(e hook.Event) string {
+    if p, ok := e.Payload.(hook.PaymentPayload); ok {
+        return s.idempotencyKey(fmt.Sprintf("hook:%s:%d", e.Type, p.DunningAttempt))
+    }
+    return s.idempotencyKey("hook:" + string(e.Type))
+}
 ```
 
-Call-site changes:
-- `s.fireLifecycle(ctx, hook.Activated)` → `s.emit(ctx, hook.Activated, nil)`
-- `s.firePayment(ctx, hook.PaymentOK, dunningAttempt, txnID, "")` → `s.emit(ctx, hook.PaymentOK, &paymentArgs{DunningAttempt: dunningAttempt, TransactionID: txnID})`
+**Call-site changes:**
+- `s.fireLifecycle(ctx, hook.Activated)` → `s.emitLifecycle(ctx, hook.Activated)`
+- `s.firePayment(ctx, hook.PaymentOK, dunningAttempt, txnID, "")` →
+  ```go
+  s.emitPayment(ctx, hook.PaymentOK, hook.PaymentPayload{
+      DunningAttempt: dunningAttempt,
+      AmountCents:    s.Plan.PriceCents,
+      Currency:       s.Plan.Currency,
+      TransactionID:  txnID,
+  })
+  ```
 
-Behavior is identical: same payload, same retry policy, same idempotency-key format for both variants.
+**Extension point.** Adding a new payload category (e.g. plan change, proration):
+1. Add struct + `isPayload()` in `internal/hook/event.go`.
+2. Add proto oneof variant in `api/v1/hooks.proto` and regenerate.
+3. Add type-switch arm in `HookDispatcher.Dispatch`.
+4. Add a new `emitXxx` method on `*Subscription` that constructs an event with the new payload.
+
+Existing payload types and emit methods don't change.
 
 ### D5. Phase-per-file split
 
@@ -157,7 +253,7 @@ signals.go               signal/query/update name constants
 handlers.go              query + signal handlers on *Subscription
 view.go                  View struct (was status.go)
 charge.go                (*Subscription).Charge orchestration + chargePurpose
-hook.go                  (*Subscription).emit + paymentArgs + isEnabled
+hook.go                  (*Subscription).emitLifecycle, emitPayment, dispatch, hookID, isEnabled
 
 phase_trial.go
 phase_activation.go
@@ -169,7 +265,7 @@ phase_next_period.go
 
 activity_payment.go      PaymentGateway, ChargePayment, ChargeResult
 activity_billing.go      BillingStore, RecordBillingEvent
-activity_hook.go         HookDispatcher, DispatchHook, LifecycleData, PaymentData
+activity_hook.go         HookDispatcher, DispatchHook (wraps hook.Event)
 
 retry.go                 ChargePaymentRetry, BillingEventRetry, HookRetry
 errors.go                error type constants
@@ -178,11 +274,20 @@ subscription_test.go
 input_test.go
 ```
 
+## File layout (`internal/hook/`)
+
+```
+hook.go                  Type enum, All, Parse (unchanged)
+event.go                 Event, Payload (sealed), LifecyclePayload, PaymentPayload  (new)
+hook_test.go             unchanged
+```
+
 ## ADRs to write
 
 - `docs/adr/0004-rename-status-to-view.md` — why View, what was wrong with Status, language-guide alignment.
 - `docs/adr/0005-drop-plan-snapshot.md` — why the parallel type is overkill for a learning project; the unused fields are explicit.
 - `docs/adr/0006-fold-activity-into-workflow-package.md` — canonical Temporal Go layout reference; the `activity_` prefix as the only discipline; risk of accidental coupling and mitigation.
+- `docs/adr/0007-integration-event-contract.md` — `hook.Event` with sealed `Payload` variant; integration-event (not domain-event) framing in DDD terms; extension is a new payload struct + emit method + proto oneof; what was rejected (Kafka, per-hook-typed structs, one method with nullable args).
 
 ## Verification
 
@@ -195,3 +300,4 @@ After the refactor:
 - `grep -r "plan.Snapshot" internal/` returns nothing.
 - `grep -r "workflow.Status\b" internal/` returns nothing.
 - `grep -r "fireLifecycle\|firePayment" internal/` returns nothing.
+- `grep -rn "LifecycleData\|PaymentData" internal/workflow/` returns nothing (they live in `internal/hook/` now as `*Payload`).
