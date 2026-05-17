@@ -88,20 +88,22 @@ func NewSubscription(in SubscriptionInput) *Subscription {
 	}
 }
 
-// SubscriptionWorkflow is the top-level workflow function registered with
-// the worker. Real lifecycle logic in (*Subscription).Run (filled by T21).
+// SubscriptionWorkflow is the top-level workflow function registered with the
+// worker. It wires lifetime-scoped message handlers, then hands off to the
+// entity's state machine. Handler registration lives here (not inside Run) so
+// Run reads as pure lifecycle.
 func SubscriptionWorkflow(ctx workflow.Context, in SubscriptionInput) error {
-	return NewSubscription(in).Run(ctx)
+	s := NewSubscription(in)
+	if err := s.registerMessageHandlers(ctx); err != nil {
+		return err
+	}
+	return s.Run(ctx)
 }
 
 // Run is the entity workflow body. Branches on first-period (with or without
 // trial) vs renewal; on renewal, routes to dunning on failure; awaits period
 // end or cancel; deactivates or CANs into the next period.
 func (s *Subscription) Run(ctx workflow.Context) error {
-	if err := s.registerHandlers(ctx); err != nil {
-		return err
-	}
-
 	if s.RenewalCount == 0 {
 		if s.Plan.TrialDuration > 0 {
 			outcome, err := s.Trial(ctx)

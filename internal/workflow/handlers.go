@@ -43,10 +43,13 @@ func (s *Subscription) OnContextUpdate(_ workflow.Context, updates map[string]st
 	}
 }
 
-// registerHandlers wires up query + signal handlers. The Activate UPDATE
-// handler is registered separately inside AwaitActivation (T17) because it's
-// only valid on the first paid period.
-func (s *Subscription) registerHandlers(ctx workflow.Context) error {
+// registerMessageHandlers wires up the query + signal handlers that live for
+// the workflow's whole lifetime. Called once from SubscriptionWorkflow before
+// Run takes over — matches the canonical Temporal entity-workflow pattern of
+// registering lifetime-scoped handlers at construction time. The Activate
+// UPDATE handler is registered separately inside AwaitActivation because
+// it's only valid on the first paid period.
+func (s *Subscription) registerMessageHandlers(ctx workflow.Context) error {
 	if err := workflow.SetQueryHandler(ctx, QuerySubscriptionView, s.View); err != nil {
 		return err
 	}
