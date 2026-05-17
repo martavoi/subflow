@@ -85,3 +85,10 @@ func TestAll_ContainsAllConstants(t *testing.T) {
 		seen[h] = true
 	}
 }
+
+// Compile-time check that both payload types satisfy the sealed Payload
+// interface. If a payload type stops satisfying it, this file won't compile.
+var (
+	_ hook.Payload = hook.LifecyclePayload{}
+	_ hook.Payload = hook.PaymentPayload{}
+)
