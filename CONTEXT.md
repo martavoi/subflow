@@ -8,6 +8,10 @@ Subflow models a subscription lifecycle on top of Temporal. Plans configure pric
 The aggregate that tracks one customer's ongoing relationship to a Plan. Has a Phase, a current Billing Period, and a Context.
 _Avoid_: Subscription Order, Membership
 
+**View**:
+The read-model projection returned by the `subscription.view` query — current Phase, Billing Period, Context, and charge counters for API rendering. Distinct from Phase (lifecycle state); the View aggregates several observable facts. Snapshot was a previous parallel name, removed in ADR 0004 / 0005.
+_Avoid_: Status, State, Snapshot
+
 **Plan**:
 The pricing and cadence template a Subscription is bound to at creation. Carries price, cadence, trial config, dunning config, integration endpoint, and enabled Hooks.
 _Avoid_: Product, Tier, Package
@@ -45,7 +49,7 @@ The terminal Phase. No further Charges. After the Deactivation Hook fires, the S
 _Avoid_: Suspended, Closed
 
 **Hook**:
-A pure-notification event the integrator subscribes to per-Plan. Fire-and-forget — the workflow does not branch on the response. Integrators that need to influence Subscription state mutate the Context via `UpdateSubscriptionContext`; subsequent Hooks carry the new Context.
+A pure-notification event the integrator subscribes to per-Plan. Fire-and-forget — the workflow does not branch on the response. Integrators that need to influence Subscription state mutate the Context via `UpdateSubscriptionContext`; subsequent Hooks carry the new Context. Hooks are integration events: they are published outward; the workflow never consumes its own emissions to drive internal state. See ADR 0007.
 _Avoid_: Webhook (implies HTTP), Callback (implies synchronous return)
 
 **Context**:
